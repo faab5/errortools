@@ -1,6 +1,8 @@
 import errortools
 import numpy as np
 
+np.random.seed(42)
+
 def test_logistic_regression_check_inputs():
     estimator = errortools.LogisticRegression()
 
