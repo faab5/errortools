@@ -15,7 +15,7 @@ class LogisticRegression():
     
     def predict(self, X):
         pass
-    
+      
     def predict(self, X, w):
         pass
     
