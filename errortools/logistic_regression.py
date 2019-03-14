@@ -2,8 +2,10 @@ import numpy as np
 import iminuit
 import scipy.stats
 
-class LogisticRegression():
+class LogisticRegression(object):
     """
+    Class for fitting a, predicting with and estimating error on logistic regression
+
 
     """
 
@@ -41,18 +43,18 @@ class LogisticRegression():
         classification (i.e. the log-loss), and l1 and/or l2
         regularization
 
-        :param w:
-        :param X:
-        :param y:
-        :param l1:
-        :param l2:
+        :param w: [numpy 1D array] weight vector
+        :param X: [numpy 2D array] feature matrix
+        :param y: [numpy 1D array] target vector
+        :param l1: [float or numpy 1D array] l1 regularization parameter
+        :param l2: [float or numpy 2D array] l2 regularization parameter
         :return: negative log posterior of weights given data
         """
         # predictions on train set with given weights
         y_pred = scipy.stats.logistic.cdf(np.dot(X, w))
 
         # negative log-likelihood of predictions
-        nll = -np.sum(np.where(y==1, np.log(y_pred), np.log(1-y_pred)))
+        nll = -np.sum(np.where(y==0, np.log(1-y_pred), np.log(y_pred)))
 
         if l1 == 0 and l2 == 0:
             return nll
@@ -69,12 +71,12 @@ class LogisticRegression():
         :param X: feature matrix
         :param y: target vector
         :param w0: initial weight vector
-        :param fit_intercept: whether to include the intercept
+        :param fit_intercept: override whether to include the intercept
             default None, taken as previously
-        :param l1: l1 reguralization parameter
-            default None, taken as previously
-        :param l2: l2 regularization parameter
-            default None, taken as previously
+        :param l1: override l1 reguralization parameter
+            default None, taken as previously set
+        :param l2: override l2 regularization parameter
+            default None, taken as previously set
         """
         # update fit_intercept parameters if given
         if fit_intercept in (True, False,):
@@ -113,8 +115,10 @@ class LogisticRegression():
 
         # check validity of minimum
         if not fmin.is_valid:
-            # ToDo check for more fitting failures
             raise RuntimeError("Minimization has not converged.\n%s" % (str(fmin)))
+        if not fmin.has_covariance or not fmin.has_accurate_covar or not fmin.has_posdef_covar or \
+                fmin.has_made_posdef_covar or fmin.hesse_failed:
+            raise RuntimeError("Problem encountered with covariance estimation.\n%s" % (str(fmin)))
 
         # estimate covariance matrix with hesse
         self.minuit.hesse(maxcall=self._hesse_maxcall)
@@ -124,10 +128,50 @@ class LogisticRegression():
         self.cvr_mtx = self.minuit.np_matrix()
     
     def predict(self, X):
-        pass
+        """
+        Calculates logistic scores given features X
+
+        :param X: [numpy 2D array] feature matrix
+        :return: [numpy 1D array] logistic regression scores
+        """
+        if self.weights is None:
+            raise RuntimeError("Fit before predict")
+        X, _, _ = self._check_inputs(X, self.weights, None, self.fit_intercept)
+        y_pred = scipy.stats.logistic.cdf(np.dot(X, self.weights))
+        return y_pred
       
-    def estimate_errors(self, X):
-        pass
+    def estimate_errors(self, X, nstddevs=1):
+        """
+        Calculates upper and lower uncertainty estimates
+        on logistic scores for given features X
+
+        The log-posterior distribution is approximated with a
+        parabolic approximation (a covariance matrix
+        around the fitted weights), i.e. as a Gaussian
+        distribution.
+        The one standard deviation interval in weight space is
+        then an ellipsis around the fitted weight vector.
+        Within this one standard deviation interval there is a
+        weight vector for which the logistic score is maximum and
+        there is a weight vector for which it is minimum.
+        These maximum and minimum are then quoted as the one
+        standard deviation upper and lower errors on the logistic
+        score.
+
+        :param X: [numpy 2D array] feature matrix
+        :param nstddevs: [int] number of standard deviations away from
+            fitted weights
+        :return: [numpy 1D arrays] upper and lower error estimates
+        """
+        if self.weights is None:
+            raise RuntimeError("Fit before error estimation")
+        X, _, _ = self._check_inputs(X, self.weights, None, self.fit_intercept)
+        mid = np.dot(X, self.weights)
+        delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
+        y_pred = scipy.stats.logistic.cdf(mid)
+        upper = scipy.stats.logistic.cdf(mid + nstddevs * delta) - y_pred
+        lower = y_pred - scipy.stats.logistic.cdf(mid - nstddevs * delta)
+        return upper, lower
 
     def _check_inputs(self, X, w=None, y=None, fit_intercept=True):
         """
