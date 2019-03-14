@@ -33,7 +33,8 @@ class LogisticRegression(object):
         self._migrad_precision = None
         self._hesse_maxcall = 0
 
-    def negativeLogPosterior(self, w, X, y, l1, l2):
+    @staticmethod
+    def negativeLogPosterior(w, X, y, l1, l2):
         """
         Calculates the negative of the log of the posterior
         distribution over the weights given targets and
