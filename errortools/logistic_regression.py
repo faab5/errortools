@@ -1,6 +1,7 @@
 import numpy as np
 import iminuit
 import scipy.stats
+import scipy.sparse
 
 class LogisticRegression(object):
     """
@@ -17,6 +18,7 @@ class LogisticRegression(object):
 
         # post-fit attributes
         self.weights = None
+        self.bias    = None
         self.cvr_mtx = None
         self.minuit  = None
 
@@ -34,7 +36,7 @@ class LogisticRegression(object):
         self._hesse_maxcall = 0
 
     @staticmethod
-    def negativeLogPosterior(w, X, y, l1, l2):
+    def negativeLogPosterior(w, b, X, y, l1, l2):
         """
         Calculates the negative of the log of the posterior
         distribution over the weights given targets and
@@ -45,6 +47,7 @@ class LogisticRegression(object):
         regularization
 
         :param w: [numpy 1D array] weight vector
+        :param b: [float] bias/intercept
         :param X: [numpy 2D array] feature matrix
         :param y: [numpy 1D array] target vector
         :param l1: [float or numpy 1D array] l1 regularization parameter
@@ -52,10 +55,10 @@ class LogisticRegression(object):
         :return: negative log posterior of weights given data
         """
         # predictions on train set with given weights
-        y_pred = scipy.stats.logistic.cdf(np.dot(X, w))
+        y_pred = 1./(1.+np.exp(-X.dot(w)-b))
 
         # negative log-likelihood of predictions
-        nll = -np.sum(np.where(y==0, np.log(1-y_pred), np.log(y_pred)))
+        nll = -np.sum(y*np.log(y_pred) + (1-y)*np.log(1-y_pred))
 
         if l1 == 0 and l2 == 0:
             return nll
@@ -65,13 +68,14 @@ class LogisticRegression(object):
 
         return nll + nlp
 
-    def fit(self, X, y, w0=0, fit_intercept=None, l1=None, l2=None):
+    def fit(self, X, y, w0=0, b0=0, fit_intercept=None, l1=None, l2=None):
         """
         Fit logistic regression to feature matrix X and target vector y
 
         :param X: feature matrix
         :param y: target vector
         :param w0: initial weight vector
+        :param b0: initial bias
         :param fit_intercept: override whether to include the intercept
             default None, taken as previously
         :param l1: override l1 reguralization parameter
@@ -84,7 +88,7 @@ class LogisticRegression(object):
             self.fit_intercept = fit_intercept
 
         # check inputs
-        X, w0, y = self._check_inputs(X, w0, y, self.fit_intercept)
+        X, y, w0, b0 = self._check_inputs(X, y, w0, b0)
 
         # update regularization parameters if given
         if isinstance(l1, (int, float,)):
@@ -101,10 +105,21 @@ class LogisticRegression(object):
                 self.l2 = l2
 
         # define function to be minimized
-        fcn = lambda w: self.negativeLogPosterior(w, X, y, self.l1, self.l2)
+        fcn = lambda w: self.negativeLogPosterior(w[:-1], w[-1], X, y, self.l1, self.l2)
+        start = np.array(w0.tolist() + [b0])
+        if self.fit_intercept:
+            if self._minuit_fix is None:
+                self._minuit_fix = [False]*(w0.shape[0]+1)
+            else:
+                self._minuit_fix[-1] = False
+        else:
+            if self._minuit_fix is None:
+                self._minuit_fix = [False]*w0.shape[0] + [True]
+            else:
+                self._minuit_fix[-1] = True
 
         # initiate minuit minimizer
-        self.minuit = iminuit.Minuit.from_array_func(fcn=fcn, start=w0,
+        self.minuit = iminuit.Minuit.from_array_func(fcn=fcn, start=start,
                 throw_nan=self._minuit_throw_nan, pedantic=self._minuit_pedantic,
                 print_level=self._minuit_print_level, grad=None, error=0,
                 limit=self._minuit_limit, fix=self._minuit_fix, name=self._minuit_name,
@@ -137,7 +152,7 @@ class LogisticRegression(object):
         """
         if self.weights is None:
             raise RuntimeError("Fit before predict")
-        X, _, _ = self._check_inputs(X, self.weights, None, self.fit_intercept)
+        X, _, _, b = self._check_inputs(X, None, self.weights, self.bias)
         y_pred = scipy.stats.logistic.cdf(np.dot(X, self.weights))
         return y_pred
       
@@ -174,7 +189,7 @@ class LogisticRegression(object):
         lower = y_pred - scipy.stats.logistic.cdf(mid - nstddevs * delta)
         return upper, lower
 
-    def _check_inputs(self, X, w=None, y=None, fit_intercept=True):
+    def _check_inputs(self, X, y=None, w=None, b=None):
         """
         Check inputs for matching dimensions and convert to numpy arrays
 
@@ -184,59 +199,44 @@ class LogisticRegression(object):
         :param X: feature matrix
         :param w: weight vector
         :param y: target vector
-        :param fit_intercept:
-        :return: X, w, y as numpy arrays
+        :param b: bias
+        :return: X, y, w, as numpy arrays, b as float
         """
-        if y is not None:
+        if scipy.sparse.issparse(X):
+            X = X.tocsr()
+        else:
             X = np.atleast_2d(X)
-            y = (np.atleast_1d(y) != 0).astype(int)
-            w = np.zeros(1, dtype=float) if w is None else np.atleast_1d(w)
 
-            if X.ndim > 2:
-                raise ValueError("Dimension of features X bigger than 2 not supported")
+        w = np.zeros(1, dtype=float) if w is None else np.atleast_1d(w)
+        b = 0 if b is None else float(b)
+
+        if X.ndim > 2:
+            raise ValueError("Dimension of features X bigger than 2 not supported")
+        if w.ndim > 1:
+            raise ValueError("Dimension of weights w bigger than 1 not supported")
+
+        if y is not None:
+            y = (np.atleast_1d(y) != 0).astype(int)
+
             if y.ndim > 1:
                 raise ValueError("Dimension of target y bigger than 1 not supported")
-            if w.ndim > 1:
-                raise ValueError("Dimension of weights w bigger than 1 not supported")
 
             if X.shape[0] == 1 and X.shape[1] == y.shape[0]:
                 # X could have been 1D and stored as a row
                 # in stead of a column. If so transpose X.
-                X = X.T
+                X = (X.T).tocsr() if scipy.sparse.issparse(X) else X.T
             elif X.shape[0] != y.shape[0]:
                 raise ValueError("Number of data points in features X and target y don't match")
 
-            if fit_intercept == True:
-                X = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
+        if w.shape[0] == 1:
+            # w could have been given as a number not an array
+            # if so expand it to the width of X
+            w = np.full(X.shape[1], w[0], dtype=float)
 
-            if w.shape[0] == 1:
-                # w could have been given as a number not an array
-                # if so expand it to the width of X
-                w = np.full(X.shape[1], w[0], dtype=float)
+        if w.shape[0] != X.shape[1]:
+            raise ValueError("Dimension of weights w does not match number of features X")
 
-            if w.shape[0] != X.shape[1]:
-                raise ValueError("Dimension of weights w does not match number of features X")
-
-        else:
-            X = np.atleast_2d(X)
-            if fit_intercept == True:
-                X = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
-
-            w = np.zeros(1, dtype=float) if w is None else np.atleast_1d(w)
-            if w.shape[0] == 1:
-                # w could have been given as a number not an array
-                # if so expand it to the width of X
-                w = np.full(X.shape[1], w[0], dtype=float)
-
-            if X.ndim > 2:
-                raise ValueError("Dimension of features X bigger than 2 not supported")
-            if w.ndim > 1:
-                raise ValueError("Dimension of weights w bigger than 1 not supported")
-
-            if w.shape[0] != X.shape[1]:
-                raise ValueError("Dimension of weights w does not match number of features X")
-
-        return X, w, y
+        return X, y, w, b
     
     
     
