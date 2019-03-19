@@ -2,6 +2,7 @@ import numpy as np
 import iminuit
 import scipy.stats
 import scipy.sparse
+import matplotlib.pyplot as plt
 
 class LogisticRegression(object):
     """
@@ -9,7 +10,6 @@ class LogisticRegression(object):
 
 
     """
-
     def __init__(self, fit_intercept=True, l1=0, l2=0):
         # pre-fit attributes
         self.fit_intercept = fit_intercept
@@ -17,9 +17,6 @@ class LogisticRegression(object):
         self.l2 = l2
 
         # post-fit attributes
-        self.weights = None
-        self.bias    = None
-        self.cvr_mtx = None
         self.minuit  = None
 
         # Fit parameters that a user could set
@@ -35,8 +32,20 @@ class LogisticRegression(object):
         self._migrad_precision = None
         self._hesse_maxcall = 0
 
+    @property
+    def weights(self):
+        if self.minuit is None:
+            raise RuntimeError("Fit before access to fit parameters")
+        return self.minuit.np_values()
+
+    @property
+    def cvr_mtx(self):
+        if self.minuit is None:
+            raise RuntimeError("Fit before access to fit parameters")
+        return self.minuit.np_matrix()
+
     @staticmethod
-    def negativeLogPosterior(w, b, X, y, l1, l2):
+    def negativeLogPosterior(w, X, y, l1, l2):
         """
         Calculates the negative of the log of the posterior
         distribution over the weights given targets and
@@ -47,7 +56,6 @@ class LogisticRegression(object):
         regularization
 
         :param w: [numpy 1D array] weight vector
-        :param b: [float] bias/intercept
         :param X: [numpy 2D array] feature matrix
         :param y: [numpy 1D array] target vector
         :param l1: [float or numpy 1D array] l1 regularization parameter
@@ -55,7 +63,7 @@ class LogisticRegression(object):
         :return: negative log posterior of weights given data
         """
         # predictions on train set with given weights
-        y_pred = 1./(1.+np.exp(-X.dot(w)-b))
+        y_pred = 1./(1.+np.exp(-X.dot(w)))
 
         # negative log-likelihood of predictions
         nll = -np.sum(y*np.log(y_pred) + (1-y)*np.log(1-y_pred))
@@ -64,18 +72,43 @@ class LogisticRegression(object):
             return nll
 
         # negative log-prior of weights
-        nlp = np.mean(np.abs(l1 * w)) + np.mean(l2 * w**2)
+        nlp = np.sum(np.abs(l1 * w)) + 0.5 * np.sum(l2 * w**2)
 
         return nll + nlp
 
-    def fit(self, X, y, w0=0, b0=0, fit_intercept=None, l1=None, l2=None):
+    @staticmethod
+    def gradientNegativeLogPosterior(w, X, y, l1, l2):
+        """
+
+        :param w: [numpy 1D array] weight vector
+        :param X: [numpy 2D array] feature matrix
+        :param y: [numpy 1D array] target vector
+        :param l1: [float or numpy 1D array] l1 regularization parameter
+        :param l2: [float or numpy 2D array] l2 regularization parameter
+        :return: gradient with respect to the weights of the negative
+            log posterior
+        """
+        # predictions on train set with given weights
+        y_pred = 1. / (1. + np.exp(-X.dot(w)))
+
+        # gradient negative log-likelihood
+        gnll = np.sum((y_pred-y)[:,np.newaxis] * X, axis=0)
+
+        if l1 == 0 and l2 == 0:
+            return gnll
+
+        # gradient of negative log-prior
+        gnlp = l1 * np.sign(w) + l2 * w
+
+        return gnll + gnlp
+
+    def fit(self, X, y, w0=0, fit_intercept=None, l1=None, l2=None):
         """
         Fit logistic regression to feature matrix X and target vector y
 
         :param X: feature matrix
         :param y: target vector
         :param w0: initial weight vector
-        :param b0: initial bias
         :param fit_intercept: override whether to include the intercept
             default None, taken as previously
         :param l1: override l1 reguralization parameter
@@ -88,7 +121,7 @@ class LogisticRegression(object):
             self.fit_intercept = fit_intercept
 
         # check inputs
-        X, y, w0, b0 = self._check_inputs(X, y, w0, b0)
+        X, y, w0 = self._check_inputs(X, y, w0, self.fit_intercept)
 
         # update regularization parameters if given
         if isinstance(l1, (int, float,)):
@@ -105,21 +138,10 @@ class LogisticRegression(object):
                 self.l2 = l2
 
         # define function to be minimized
-        fcn = lambda w: self.negativeLogPosterior(w[:-1], w[-1], X, y, self.l1, self.l2)
-        start = np.array(w0.tolist() + [b0])
-        if self.fit_intercept:
-            if self._minuit_fix is None:
-                self._minuit_fix = [False]*(w0.shape[0]+1)
-            else:
-                self._minuit_fix[-1] = False
-        else:
-            if self._minuit_fix is None:
-                self._minuit_fix = [False]*w0.shape[0] + [True]
-            else:
-                self._minuit_fix[-1] = True
+        fcn = lambda w: self.negativeLogPosterior(w, X, y, self.l1, self.l2)
 
         # initiate minuit minimizer
-        self.minuit = iminuit.Minuit.from_array_func(fcn=fcn, start=start,
+        self.minuit = iminuit.Minuit.from_array_func(fcn=fcn, start=w0,
                 throw_nan=self._minuit_throw_nan, pedantic=self._minuit_pedantic,
                 print_level=self._minuit_print_level, grad=None, error=0,
                 limit=self._minuit_limit, fix=self._minuit_fix, name=self._minuit_name,
@@ -137,12 +159,11 @@ class LogisticRegression(object):
             raise RuntimeError("Problem encountered with covariance estimation.\n%s" % (str(fmin)))
 
         # estimate covariance matrix with hesse
+        # temporarily set self.l1 to 0. This is probably not good practice an needs to be fixed
+        l1, self.l1 = self.l1, 0
         self.minuit.hesse(maxcall=self._hesse_maxcall)
+        self.l1 = l1
 
-        # remember weights and covariance matrix
-        self.weights = self.minuit.np_values()
-        self.cvr_mtx = self.minuit.np_matrix()
-    
     def predict(self, X):
         """
         Calculates logistic scores given features X
@@ -150,10 +171,8 @@ class LogisticRegression(object):
         :param X: [numpy 2D array] feature matrix
         :return: [numpy 1D array] logistic regression scores
         """
-        if self.weights is None:
-            raise RuntimeError("Fit before predict")
-        X, _, _, b = self._check_inputs(X, None, self.weights, self.bias)
-        y_pred = scipy.stats.logistic.cdf(np.dot(X, self.weights))
+        X, _, w = self._check_inputs(X, None, self.weights, self.fit_intercept)
+        y_pred = 1. / (1. + np.exp(-X.dot(w)))
         return y_pred
       
     def estimate_errors(self, X, nstddevs=1):
@@ -179,17 +198,15 @@ class LogisticRegression(object):
             fitted weights
         :return: [numpy 1D arrays] upper and lower error estimates
         """
-        if self.weights is None:
-            raise RuntimeError("Fit before error estimation")
-        X, _, _ = self._check_inputs(X, self.weights, None, self.fit_intercept)
-        mid = np.dot(X, self.weights)
+        X, _, w = self._check_inputs(X, None, self.weights, self.fit_intercept)
+        mid = X.dot(w)
         delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
-        y_pred = scipy.stats.logistic.cdf(mid)
-        upper = scipy.stats.logistic.cdf(mid + nstddevs * delta) - y_pred
-        lower = y_pred - scipy.stats.logistic.cdf(mid - nstddevs * delta)
-        return upper, lower
+        y_pred = 1. / (1. + np.exp(-mid))
+        upper = 1. / (1. + np.exp(-mid - nstddevs * delta)) - y_pred
+        lower = y_pred - 1. / (1. + np.exp(-mid + nstddevs * delta))
+        return lower, upper
 
-    def _check_inputs(self, X, y=None, w=None, b=None):
+    def _check_inputs(self, X, y=None, w=None, fit_intercept=True):
         """
         Check inputs for matching dimensions and convert to numpy arrays
 
@@ -199,16 +216,12 @@ class LogisticRegression(object):
         :param X: feature matrix
         :param w: weight vector
         :param y: target vector
-        :param b: bias
-        :return: X, y, w, as numpy arrays, b as float
+        :param fit_intercept: whether to fit the intercept
+        :return: X, y, w, as numpy arrays
         """
-        if scipy.sparse.issparse(X):
-            X = X.tocsr()
-        else:
-            X = np.atleast_2d(X)
+        X = np.atleast_2d(X)
 
         w = np.zeros(1, dtype=float) if w is None else np.atleast_1d(w)
-        b = 0 if b is None else float(b)
 
         if X.ndim > 2:
             raise ValueError("Dimension of features X bigger than 2 not supported")
@@ -224,9 +237,12 @@ class LogisticRegression(object):
             if X.shape[0] == 1 and X.shape[1] == y.shape[0]:
                 # X could have been 1D and stored as a row
                 # in stead of a column. If so transpose X.
-                X = (X.T).tocsr() if scipy.sparse.issparse(X) else X.T
+                X = X.T
             elif X.shape[0] != y.shape[0]:
                 raise ValueError("Number of data points in features X and target y don't match")
+
+        if fit_intercept:
+            X = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
 
         if w.shape[0] == 1:
             # w could have been given as a number not an array
@@ -236,8 +252,4 @@ class LogisticRegression(object):
         if w.shape[0] != X.shape[1]:
             raise ValueError("Dimension of weights w does not match number of features X")
 
-        return X, y, w, b
-    
-    
-    
-    
+        return X, y, w
