@@ -139,7 +139,6 @@ class LogisticRegression(object):
 
         # define function to be minimized
         fcn = lambda w: self.negativeLogPosterior(w, X, y, self.l1, self.l2)
-
         # initiate minuit minimizer
         self.minuit = iminuit.Minuit.from_array_func(fcn=fcn, start=w0,
                 throw_nan=self._minuit_throw_nan, pedantic=self._minuit_pedantic,
@@ -158,11 +157,7 @@ class LogisticRegression(object):
                 fmin.has_made_posdef_covar or fmin.hesse_failed:
             raise RuntimeError("Problem encountered with covariance estimation.\n%s" % (str(fmin)))
 
-        # estimate covariance matrix with hesse
-        # temporarily set self.l1 to 0. This is probably not good practice an needs to be fixed
-        l1, self.l1 = self.l1, 0
         self.minuit.hesse(maxcall=self._hesse_maxcall)
-        self.l1 = l1
 
     def predict(self, X):
         """
