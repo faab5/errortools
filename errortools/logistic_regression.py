@@ -16,7 +16,7 @@ class LogisticRegression(object):
         self.l2 = l2
 
         # post-fit attributes
-        self.minuit = None
+        self.minuit  = None
 
         # Fit parameters that a user could set
         # but probably won't, so good defaults
@@ -120,7 +120,6 @@ class LogisticRegression(object):
 
         # define function to be minimized
         fcn = lambda w: self.negativeLogPosterior(w, X, y, self.l1, self.l2)
-
         # initiate minuit minimizer
         self.minuit = iminuit.Minuit.from_array_func(fcn=fcn, start=w0,
                 throw_nan=self._minuit_throw_nan, pedantic=self._minuit_pedantic,
@@ -139,10 +138,7 @@ class LogisticRegression(object):
                 fmin.has_made_posdef_covar or fmin.hesse_failed:
             raise RuntimeError("Problem encountered with covariance estimation.\n%s" % (str(fmin)))
 
-        # ToDo compare Hesse cvr_mtx with Migrad cvr_mtx as extra check
-
         self.minuit.hesse(maxcall=self._hesse_maxcall)
-
 
     def predict(self, X):
         """
@@ -185,6 +181,33 @@ class LogisticRegression(object):
         upper = 1. / (1. + np.exp(-mid - nstddevs * delta)) - y_pred
         lower = y_pred - 1. / (1. + np.exp(-mid + nstddevs * delta))
         return lower, upper
+    
+    def estimate_errors_sampling(self, X, n_samples):
+        """
+        Calculates a symmetric uncertainty estimate
+        on logistic scores for given features X
+
+        This is achieved by calculating the non-central variance 
+        for each data point based on sampled weights from a multivariate 
+        normal distribution and the weights fitted by the logistic model.
+
+        :param X: [numpy 2D array] feature matrix
+        :param n_samples: [int] number of samples to draw from the distribution
+        :return: [numpy 1D arrays] upper and lower error estimates (symmetric)
+        """
+        X, _, w = self._check_inputs(X, None, self.weights, self.fit_intercept)
+
+        sampled_weights = np.random.multivariate_normal(w, self.cvr_mtx, n_samples).T
+        fitted_weights = np.tile(w, (n_samples, 1)).T
+        
+        sigmoid_sampled_weights = 1./(1.+np.exp(-X.dot(sampled_weights)))
+        sigmoid_fitted_weights = 1./(1.+np.exp(-X.dot(fitted_weights)))
+                
+        var = np.sum(np.square(sigmoid_sampled_weights - sigmoid_fitted_weights), axis = 1) / n_samples
+        
+        symmetric_error = np.sqrt(var)
+        
+        return symmetric_error, symmetric_error
 
     def _check_inputs(self, X, y=None, w=None, fit_intercept=True):
         """
