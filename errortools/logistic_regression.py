@@ -11,7 +11,6 @@ class LogisticRegression(object):
 
     """
     def __init__(self, fit_intercept=True, l1=0, l2=0):
-        # pre-fit attributes
         self.fit_intercept = fit_intercept
         self.l1 = l1
         self.l2 = l2
@@ -102,7 +101,7 @@ class LogisticRegression(object):
 
         return gnll + gnlp
 
-    def fit(self, X, y, w0=0, fit_intercept=None, l1=None, l2=None):
+    def fit(self, X, y, w0=0):
         """
         Fit logistic regression to feature matrix X and target vector y
 
@@ -116,33 +115,15 @@ class LogisticRegression(object):
         :param l2: override l2 regularization parameter
             default None, taken as previously set
         """
-        # update fit_intercept parameters if given
-        if fit_intercept in (True, False,):
-            self.fit_intercept = fit_intercept
-
         # check inputs
         X, y, w0 = self._check_inputs(X, y, w0, self.fit_intercept)
-
-        # update regularization parameters if given
-        if isinstance(l1, (int, float,)):
-            self.l1 = l1
-        elif hasattr(l1, "__iter__"):
-            l1 = np.array(l1, dtype=float)
-            if l1.ndim == 1 and l1.shape[0] == w0.shape[0]:
-                self.l1 = l1
-        if isinstance(l2, (int, float,)):
-            self.l2 = l2
-        elif hasattr(l1, "__iter__"):
-            l2 = np.array(l2, dtype=float)
-            if l2.ndim == 1 and l2.shape[0] == w0.shape[0]:
-                self.l2 = l2
 
         # define function to be minimized
         fcn = lambda w: self.negativeLogPosterior(w, X, y, self.l1, self.l2)
         # initiate minuit minimizer
         self.minuit = iminuit.Minuit.from_array_func(fcn=fcn, start=w0,
                 throw_nan=self._minuit_throw_nan, pedantic=self._minuit_pedantic,
-                print_level=self._minuit_print_level, grad=None, error=0,
+                print_level=self._minuit_print_level, grad=None, error=None,
                 limit=self._minuit_limit, fix=self._minuit_fix, name=self._minuit_name,
                 use_array_call=True, errordef=1)
 
@@ -227,7 +208,6 @@ class LogisticRegression(object):
         symmetric_error = np.sqrt(var)
         
         return symmetric_error, symmetric_error
-
 
     def _check_inputs(self, X, y=None, w=None, fit_intercept=True):
         """

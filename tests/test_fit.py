@@ -1,6 +1,5 @@
 import errortools
 import numpy as np
-import scipy.stats
 
 np.random.seed(42)
 
