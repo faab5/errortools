@@ -2,94 +2,73 @@ import errortools
 import numpy as np
 
 np.random.seed(42)
+estimator = errortools.LogisticRegression()
 
-def test_logistic_regression_check_inputs():
-    estimator = errortools.LogisticRegression()
-
-    # check shapes of X, y, weights w
+def test_all_inputs_as_arrays():
     X = np.random.uniform(size=4 * 3).reshape(4,3)
-    w = np.random.uniform(size=3)
+    p = np.random.uniform(size=3)
     y = np.random.choice([0,1], size=4)
-    Xp, yp, wp = estimator._check_inputs(X, y, w, False)
+    Xp, yp, wp = estimator._check_inputs(X, y, p, False)
     assert wp.shape[0] == Xp.shape[1]
     assert yp.shape[0] == Xp.shape[0]
 
-    # check shapes of X, y, weights w
-    # when weights are given as a single number
-    # _check_inputs will expand the weights to
-    # the right dimension
+def test_weights_as_number_no_bias():
     X = np.random.uniform(size=4 * 3).reshape(4, 3)
-    w = 0
+    p = 0
     y = np.random.choice([0,1], size=4)
-    Xp, yp, wp = estimator._check_inputs(X, y, w, False)
+    Xp, yp, wp = estimator._check_inputs(X, y, p, False)
     assert wp.shape[0] == Xp.shape[1]
     assert yp.shape[0] == Xp.shape[0]
 
-    # check shapes of X, y, weights w
-    # when weights are given as a single number
-    # _check_inputs will expand the weights to
-    # the right dimension
+def test_weights_as_number_with_bias():
     X = np.random.uniform(size=4 * 3).reshape(4, 3)
-    w = 0
+    p = 0
     y = np.random.choice([0,1], size=4)
-    Xp, yp, wp = estimator._check_inputs(X, y, w, True)
+    Xp, yp, wp = estimator._check_inputs(X, y, p, True)
     assert wp.shape[0] == Xp.shape[1]
     assert yp.shape[0] == Xp.shape[0]
 
-    # check shapes of X, y, weights w
-    # when X is given as a 1D vector
-    # in stead of 2D matrix
-    # _check_inputs will reshape X
-    # to fit the target
+def test_one_data_point():
     X = np.random.uniform(size=3)
-    w = np.random.uniform(size=3)
+    p = np.random.uniform(size=3)
     y = 1
-    Xp, yp, wp = estimator._check_inputs(X, y, w, False)
+    Xp, yp, wp = estimator._check_inputs(X, y, p, False)
     assert wp.shape[0] == Xp.shape[1]
     assert yp.shape[0] == Xp.shape[0]
 
-    # check shapes of X, y, weights w and bias b
-    # when X is given as a 1D vector
-    # and w as a single number
-    # _check_inputs will expand X to match y
-    # and expand w to match X
+def test_one_data_point_and_weight_as_number():
     X = np.random.uniform(size=3)
-    w = 0
+    p = 0
     y = 1
-    Xp, yp, wp = estimator._check_inputs(X, y, w, True)
+    Xp, yp, wp = estimator._check_inputs(X, y, p, True)
     assert wp.shape[0] == Xp.shape[1]
     assert yp.shape[0] == Xp.shape[0]
 
+def test_features_as_1D_array():
     X = np.random.uniform(size=3)
-    w = 0
+    p = 0
     y = np.random.choice([0,1], size=3)
-    Xp, yp, wp = estimator._check_inputs(X, y, w, True)
+    Xp, yp, wp = estimator._check_inputs(X, y, p, True)
     assert wp.shape[0] == Xp.shape[1]
     assert yp.shape[0] == Xp.shape[0]
 
-    # check shapes of X and w
-    # when y is not given
+def test_no_targets_no_bias():
     X = np.random.uniform(size=2*3).reshape(2,3)
-    w = np.random.uniform(size=3)
+    p = np.random.uniform(size=3)
     y = None
-    Xp, _, wp = estimator._check_inputs(X, y, w, False)
+    Xp, _, wp = estimator._check_inputs(X, y, p, False)
     assert wp.shape[0] == Xp.shape[1]
 
-    # check shapes of X and w
-    # when y is not given
-    # and X is given as a 1D array
+def test_no_target_and_features_as_1D_array():
     X = np.random.uniform(size=3)
-    w = np.random.uniform(size=4)
+    p = np.random.uniform(size=4)
     y = None
-    Xp, _, wp= estimator._check_inputs(X, y, w, True)
+    Xp, _, wp= estimator._check_inputs(X, y, p, True)
     assert wp.shape[0] == Xp.shape[1]
 
-    # check shapes of X and w
-    # when y is not given
-    # and X is given as a 1D array
-    # and w is given as a single number
+def test_no_target_and_features_as_1D_array_and_weights_as_number():
     X = np.random.uniform(size=3)
-    w = 0
+    p = 0
     y = None
-    Xp, _, wp = estimator._check_inputs(X, y, w, True)
+    Xp, _, wp = estimator._check_inputs(X, y, p, True)
     assert wp.shape[0] == Xp.shape[1]
