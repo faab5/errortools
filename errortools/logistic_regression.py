@@ -4,11 +4,30 @@ import matplotlib.pyplot as plt
 
 class LogisticRegression(object):
     """
-    Class for fitting a, predicting with and estimating error on logistic regression
+    Class for fitting, predicting and estimating error on logistic regression
 
+    Quick usage:
+    - instantiate: m = LogisticRegression()
+    - fit: m.fit(X, y)
+    - predict: m.predict(X)
+    - uncertainties: dwn, up = m.estimate_errors(X)
 
+    Attributes:
+    :param self.fit_intercept: whether or not to fit the include the intercept/bias in the fit
+    :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
+    :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
+    :param minuit: Minuit minimization instance
+    :param X: input features for fitting
+    :param y: targets for fitting
     """
     def __init__(self, fit_intercept=True, l1=0, l2=0):
+        """
+        Instantiate a logistic regression
+
+        :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
+        :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
+        :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
+        """
         # pre-fit attributes
         self.fit_intercept = fit_intercept
         self.l1 = l1
@@ -17,6 +36,10 @@ class LogisticRegression(object):
         # post-fit attributes
         self.minuit  = None
 
+        # training data
+        self.X = None
+        self.y = None
+        
     @property
     def parameters(self):
         """
@@ -46,6 +69,16 @@ class LogisticRegression(object):
         return self.minuit.np_matrix()
 
     @staticmethod
+    def logistic(x):
+        """
+        The logistic function CDF
+
+        :param x: [numpy nD array] input
+        :return: [numpy nD array] logistic function of the input
+        """
+        return 1. / (1. + np.exp(-x))
+
+    @staticmethod
     def negativeLogPosterior(p, X, y, l1, l2):
         """
         Calculate the negative of the log of the posterior
@@ -64,7 +97,7 @@ class LogisticRegression(object):
         :return: negative log posterior of parameters given data
         """
         # predictions on train set with given parameters
-        y_pred = 1./(1.+np.exp(-X.dot(p)))
+        y_pred = LogisticRegression.logistic(X.dot(p))
 
         # negative log-likelihood of predictions
         nll = -np.sum(y*np.log(y_pred+1e-16) + (1-y)*np.log(1-y_pred+1e-16))
@@ -90,7 +123,7 @@ class LogisticRegression(object):
             log posterior
         """
         # predictions on train set with given parameters
-        y_pred = 1. / (1. + np.exp(-X.dot(p)))
+        y_pred = LogisticRegression.logistic(X.dot(p))
 
         # gradient negative log-likelihood
         gnll = np.sum((y_pred-y)[:,np.newaxis] * X, axis=0)
@@ -104,68 +137,107 @@ class LogisticRegression(object):
         return gnll + gnlp
 
     def fit(self, X, y,
-            initial_parameters=0, initial_step_sizes=1,
+            initial_parameters=None, initial_step_sizes=None,
             parameter_limits=None, parameter_fixes=None,
-            throw_nan=False, print_level=0,
-            max_function_calls=10000, n_splits=1, precision=None):
+            print_level=0,
+            max_function_calls=10000, n_splits=1):
         """
         Fit logistic regression to feature matrix X and target vector y
 
+        If you call this method more than once, you resume a fit with
+        parameters, step sizes, limits and fixes at the end of the previous fit,
+        for each that is given as None as an argument
+
         :param X: [numpy.ndarray shape (n_data, n_features,)] feature matrix
-        :param y: [numpy.ndarray shape (n_data,)]target vector
+        :param y: [numpy.ndarray shape (n_data,)] target vector
         :param initial_parameters: [sequence of numbers, length n_features+1] initial parameter vector
             A single number is promoted to all parameters
+            None means all zeros for a first fit, or resume from previous fit
         :param initial_step_sizes: [sequence of numbers, length n_features+1] initial minimization
              parameter step sizes. A single number is promoted to all parameters
              Usually, the choice is not important. In the worst case, iminuit will use a few more
              function evaluations to find the minimum
+             None means all ones for a first fit, or resume from previous fit
         :param parameter_limits: [sequence of tuples of numbers, length n_features+1] lower and upper bounds
-            for parameters. Use None for no bound
+            for parameters. Use None within the sequence for no bound for that parameter or False for no bounds
+            for all parameters, and use None to take the limits from the previous fit
         :param parameter_fixes: [sequence of booleans, length n_features+1] Whether to fix a parameter to the
             initial value
-        :param throw_nan: Minuit raises a RuntimeError when it encounters nan
-        :param print_level: 0 is quiet. 1 print out fit results
+            Use False not to fix any parameters and None to take the fixes from the previous fit
+        :param print_level: 0 is quiet. 1 print out fit results. 2 paranoid. 3 really paranoid
         :param max_function_calls: [integer] maximum number of function calls
         :param n_splits: [integer] split fit in to n_splits runs. Fitting stops when it found the function
             minimum to be valid or n_calls is reached
-        :param precision: override Miniut own’s internal precision
         """
-        # check inputs
-        X, y, initial_parameters = self._check_inputs(X, y, initial_parameters, self.fit_intercept)
 
-        if parameter_limits is not None:
-            if not hasattr(parameter_limits, "__iter__"):
-                raise ValueError("Limits should be a sequence of range tuples")
-            if not all([l is None or (isinstance(l,(tuple,)) and len(l)==2 and\
-                    (l[0] is None or isinstance(l[0],(int,float,))) and\
-                    (l[1] is None or isinstance(l[1],(int,float,)))) for l in parameter_limits]):
-                raise ValueError("A limit should be a range tuple or None")
-            if len(parameter_limits) != len(initial_parameters):
-                raise ValueError("{:d} limits given for {:d} parameters".format(len(parameter_limits), len(initial_parameters)))
+        if self.minuit is None or\
+            initial_parameters is not None or\
+            initial_step_sizes is not None or\
+            parameter_limits is not None or\
+            parameter_fixes is not None:
 
-        if parameter_fixes is not None:
-            if not hasattr(parameter_fixes, "__iter__"):
-                raise ValueError("Fixes should be a sequence of booleans")
-            if not all([isinstance(f, (bool, int, float,)) for f in parameter_fixes]):
-                raise ValueError("A fix should be True or False")
-            if len(parameter_fixes) != len(initial_parameters):
-                raise ValueError("{:d} fixes given for {:d} parameters".format(len(parameter_fixes), len(initial_parameters)))
-            fixes = [bool(f) for f in parameter_fixes]
+            initial_parameters = initial_parameters if initial_parameters is not None else self.minuit.np_values()\
+                if self.minuit is not None else None
+            self.X, self.y, initial_parameters = self._check_inputs(X, y, initial_parameters, self.fit_intercept)
 
-        # define function to be minimized
-        fcn = lambda p: self.negativeLogPosterior(p, X, y, self.l1, self.l2)
+            if initial_step_sizes is not None:
+                if isinstance(initial_step_sizes, (float, int,)):
+                    initial_step_sizes = [initial_step_sizes]*len(initial_parameters)
+                elif not hasattr(initial_step_sizes, "__iter__") or isinstance(initial_step_sizes, str):
+                    raise ValueError("Step sizes should be a sequence of numbers")
+                elif not all([isinstance(s, (float, int,)) for s in initial_step_sizes]):
+                    raise ValueError("Step sizes should be a sequence of numbers")
+                elif len(initial_step_sizes) != len(initial_parameters):
+                    raise ValueError("{:d} step sizes given for {:d} parameters".format(len(initial_step_sizes), len(initial_parameters)))
+            elif self.minuit is not None:
+                initial_step_sizes = [state['error'] for state in self.minuit.get_param_states()]
+            else:
+                initial_step_sizes = 1
 
-        # define the gradient of the function to be minimized
-        grd = lambda p: self.gradientNegativeLogPosterior(p, X, y, self.l1, self.l2)
+            if parameter_limits == False:
+                parameter_limits = None
+            elif parameter_limits is not None:
+                if not hasattr(parameter_limits, "__iter__") or isinstance(initial_step_sizes, str):
+                    raise ValueError("Limits should be a sequence of range tuples")
+                if not all([l is None or (isinstance(l,(tuple,)) and len(l)==2 and\
+                        (l[0] is None or isinstance(l[0],(int,float,))) and\
+                        (l[1] is None or isinstance(l[1],(int,float,)))) for l in parameter_limits]):
+                    raise ValueError("A limit should be a range tuple or None")
+                if len(parameter_limits) != len(initial_parameters):
+                    raise ValueError("{:d} limits given for {:d} parameters".format(len(parameter_limits), len(initial_parameters)))
+            elif self.minuit is not None:
+                parameter_limits = [(state['lower_limit'], state['upper_limit'],) for state in self.minuit.get_param_states()]
 
-        # initiate minuit minimizer
-        self.minuit = iminuit.Minuit.from_array_func(fcn=fcn, start=initial_parameters, error=initial_step_sizes,
+            if parameter_fixes == False:
+                parameter_fixes = None
+            elif parameter_fixes is not None:
+                if not hasattr(parameter_fixes, "__iter__") or isinstance(initial_step_sizes, str):
+                    raise ValueError("Fixes should be a sequence of booleans")
+                if not all([isinstance(f, (bool, int, float,)) for f in parameter_fixes]):
+                    raise ValueError("A fix should be True or False")
+                if len(parameter_fixes) != len(initial_parameters):
+                    raise ValueError("{:d} fixes given for {:d} parameters".format(len(parameter_fixes), len(initial_parameters)))
+                parameter_fixes = [bool(f) for f in parameter_fixes]
+            elif self.minuit is not None:
+                parameter_fixes = [state['is_fixed'] for state in self.minuit.get_param_states()]
+
+            # define function to be minimized
+            fcn = lambda p: self.negativeLogPosterior(p, self.X, self.y, self.l1, self.l2)
+
+            # define the gradient of the function to be minimized
+            grd = lambda p: self.gradientNegativeLogPosterior(p, self.X, self.y, self.l1, self.l2)
+
+            # initiate minuit minimizer
+            self.minuit = iminuit.Minuit.from_array_func(fcn=fcn,
+                start=initial_parameters, error=initial_step_sizes,
                 limit=parameter_limits, fix=parameter_fixes,
-                throw_nan=throw_nan, print_level=print_level,
+                throw_nan=True, print_level=print_level,
                 grad=grd, use_array_call=True, errordef=0.5, pedantic=False)
 
+        self.minuit.print_level = print_level
+
         # minimize with migrad
-        fmin, _ = self.minuit.migrad(ncall=max_function_calls, nsplit=n_splits, precision=precision)
+        fmin, _ = self.minuit.migrad(ncall=max_function_calls, nsplit=n_splits, resume=True)
 
         # check validity of minimum
         if not fmin.is_valid:
@@ -174,7 +246,7 @@ class LogisticRegression(object):
                 # It is known that migrad sometimes fails calculating the covariance matrix,
                 # but succeeds on a second try
                 self.minuit.set_strategy(2)
-                fmin, _ = self.minuit.migrad(ncall=max_function_calls, nsplit=n_splits, precision=precision, resume=True)
+                fmin, _ = self.minuit.migrad(ncall=max_function_calls, nsplit=n_splits, resume=True)
                 if not fmin.is_valid:
                     raise RuntimeError("Problem encountered with minimization.\n%s" % (str(fmin)))
 
@@ -188,27 +260,21 @@ class LogisticRegression(object):
         :return: [numpy 1D array] logistic regression scores
         """
         X, _, p = self._check_inputs(X, None, self.parameters, self.fit_intercept)
-        y_pred = 1. / (1. + np.exp(-X.dot(p)))
+        y_pred = LogisticRegression.logistic(X.dot(p))
         return y_pred
       
     def estimate_errors(self, X, nstddevs=1):
         """
         Calculate upper and lower uncertainty estimates
         on logistic scores for given features X, based on
-        error contours/ellipses
+        error intervals
 
-        The log-posterior distribution is approximated with a
-        parabolic approximation (a covariance matrix
-        around the fitted parameters), i.e. as a Gaussian
-        distribution.
         The one standard deviation interval in parameter space is
-        then an ellipsis around the fitted parameter vector.
-        On this one standard deviation interval there is a
-        parameter vector for which the logistic score is maximum and
-        there is a parameter vector for which it is minimum.
-        These maximum and minimum are then quoted as the one
-        standard deviation upper and lower errors on the logistic
-        score.
+        the multi-dimensional range where the negative
+        log-likelihood goes up by 1/2
+        The lower and upper errors are the maximum and minimum amount
+        respectively that the logistic function goes down or up when
+        taking parameters within this interval
 
         :param X: [numpy 2D array] feature matrix
         :param nstddevs: [int] error contour
@@ -217,14 +283,14 @@ class LogisticRegression(object):
         X, _, p = self._check_inputs(X, None, self.parameters, self.fit_intercept)
         mid = X.dot(p)
         delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
-        y_pred = 1. / (1. + np.exp(-mid))
-        upper = 1. / (1. + np.exp(-mid - nstddevs * delta)) - y_pred
-        lower = y_pred - 1. / (1. + np.exp(-mid + nstddevs * delta))
+        y_pred = LogisticRegression.logistic(mid)
+        upper = LogisticRegression.logistic(mid + nstddevs * delta) - y_pred
+        lower = y_pred - LogisticRegression.logistic(mid - nstddevs * delta)
         return lower, upper
     
-    def estimate_errors_sampling(self, X, n_samples='auto', return_covariance=False):
+    def estimate_errors_sampling(self, X, n_samples=10000, return_covariance=False):
         """
-        Estimate uncertainties via linear sampling the posterior
+        Estimate uncertainties via sampling the posterior
 
         This is achieved by calculating the non-central variance 
         for each data point based on sampled parameters from a multivariate
@@ -232,7 +298,9 @@ class LogisticRegression(object):
 
         :param X: [numpy 2D array] feature matrix
         :param n_samples: [int] number of samples to draw from the distribution
-            auto (default) automatically determines the number of samples
+            By Hoeffding's inequality the number of samples needed to have less
+            than 1 per mille probability to deviate more than 1 per mille from
+            expectation is on the order of 1 million
         :param return_covariance: [boolean] return only error estitimes (False),
             or full covariance matrix (True) of the estimates
         :return: covariance matrix of error estimates if return_covariance
@@ -240,16 +308,14 @@ class LogisticRegression(object):
         """
         X, _, p = self._check_inputs(X, None, self.parameters, self.fit_intercept)
 
-        if n_samples == 'auto':
-            # ToDo: Get a better based number of samples
-            ndim = self.parameters.shape[0]
-            n_samples = 1000 if ndim < 10 else 10000 if ndim < 100 else 100000 if ndim < 10000 else ndim
+        if not isinstance(n_samples, (int,)):
+            raise ValueError("Non-integer number of samples provided")
 
         sampled_parameters = np.random.multivariate_normal(p, self.cvr_mtx, n_samples).T # shape (npars, nsamples,)
         fitted_parameters = np.tile(p, (n_samples, 1)).T # shape (npars, nsamples,)
-        
-        sigmoid_sampled_parameters = 1./(1.+np.exp(-X.dot(sampled_parameters))) # shape (ndata, nsamples,)
-        sigmoid_fitted_parameters = 1./(1.+np.exp(-X.dot(fitted_parameters))) # shape (ndata, nsamples,)
+
+        sigmoid_sampled_parameters = LogisticRegression.logistic(X.dot(sampled_parameters)) # shape (ndata, nsamples,)
+        sigmoid_fitted_parameters = LogisticRegression.logistic(X.dot(fitted_parameters)) # shape (ndata, nsamples,)
         sigmoid_variation = sigmoid_sampled_parameters - sigmoid_fitted_parameters  # shape (ndata, nsamples,)
 
         if return_covariance == True:
@@ -258,7 +324,7 @@ class LogisticRegression(object):
         else:
             var = np.mean(np.square(sigmoid_variation), axis = 1) # shape (ndata,)
             symmetric_error = np.sqrt(np.abs(var))
-            return symmetric_error, symmetric_error
+            return symmetric_error
 
     def estimate_errors_linear(self, X, n_stddevs=1, return_covariance=False):
         """
@@ -280,7 +346,7 @@ class LogisticRegression(object):
         """
         X, _, p = self._check_inputs(X, None, self.parameters, self.fit_intercept)
 
-        fcn = lambda v: 1. / (1. + np.exp(-X.dot(v)))
+        fcn = lambda p: LogisticRegression.logistic(X.dot(p))
 
         if isinstance(n_stddevs, (float, int,)):
             gradients = np.array([(fcn(p + n_stddevs*u) - fcn(p - n_stddevs*u)) \
@@ -293,7 +359,7 @@ class LogisticRegression(object):
             return covar
         else:
             symmetric_error = np.sqrt(np.abs([np.dot(g, np.dot(self.cvr_mtx, g)) for g in gradients]))
-            return symmetric_error, symmetric_error
+            return symmetric_error
 
     def _check_inputs(self, X, y=None, p=None, fit_intercept=True):
         """

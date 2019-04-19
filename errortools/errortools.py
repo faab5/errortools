@@ -13,10 +13,10 @@ def estimate_errors_sampling(fnc, X, p, cvr_mtx, n_samples='auto', return_covari
     :param n_samples: [int] sample size
         'auto' for automatically determining sample size
     :param return_covariance: [boolean] Whether to return the covariance matrix of the
-        function value errors next to the error estimates themselves
+        function value errors in stead of the error estimates themselves
     :param args: extra arguments for function
     :param kwargs: extra keyword arguments for function
-    :return: [numpy.ndarray shape (n_data,)] uncertainty estimates of function values, and if
+    :return: [numpy.ndarray shape (n_data,)] uncertainty estimates of function values, or if
         return_covariance is True [numpy.ndarray shape (n_data, n_data,)] covariance matrix
         of errors
     """
@@ -33,7 +33,7 @@ def estimate_errors_sampling(fnc, X, p, cvr_mtx, n_samples='auto', return_covari
 
     if return_covariance == True:
         covar = np.dot(function_variation, function_variation.T) / n_samples  # shape (n_data, n_data,)
-        return np.sqrt(np.abs(np.diag(covar))), covar
+        return covar
     else:
         error = np.sqrt(np.mean(np.square(function_variation), axis=1))  # shape (ndata,)
         return error
@@ -45,8 +45,8 @@ def estimate_errors_linear(grad, cvr_mtx, return_covariance=False):
     :param grad: [numpy.ndarray shape (n_data, n_pars,)] Gradients wrt parameters of a function
     :param cvr_mtx: [numpy.ndarray shape (n_pars, n_pars,)] Covariance matrix of the parameters
     :param return_covariance: [boolean] Whether to return the covariance matrix of the
-        function value errors next to the error estimates themselves
-    :return: [numpy.ndarray shape (n_data,)] uncertainty estimates of function values, and if
+        function value errors in stead of the error estimates themselves
+    :return: [numpy.ndarray shape (n_data,)] uncertainty estimates of function values, or if
         return_covariance is True [numpy.ndarray shape (n_data, n_data,)] covariance matrix
         of errors
     """
@@ -61,7 +61,7 @@ def estimate_errors_linear(grad, cvr_mtx, return_covariance=False):
 
     if return_covariance == True:
         covar = np.dot(grad, np.dot(cvr_mtx, grad.T))
-        return np.sqrt(np.abs(np.diag(covar))), covar
+        return covar
     else:
         error = np.sqrt(np.abs([np.dot(g, np.dot(cvr_mtx, g)) for g in grad]))
         return error

@@ -19,6 +19,42 @@ def amodel():
     model.predict(X)
     return model
 
+def test_refit(amodel):
+    amodel.fit(X, y, initial_parameters=1, initial_step_sizes=1, parameter_limits=[None,(None, 2), (0, None), (-1,2),], parameter_fixes=[True,False,False,True])
+    amodel.fit(X, y, parameter_limits=False, parameter_fixes=False)
+
+    with pytest.raises(Exception):
+        amodel.fit(X, y, initial_parameters=[2,3,4,'a'])
+    with pytest.raises(Exception):
+        amodel.fit(X, y, initial_parameters='a')
+    with pytest.raises(Exception):
+        amodel.fit(X, y, initial_parameters=[1,2,3,4,5])
+
+    with pytest.raises(Exception):
+        amodel.fit(X, y, initial_step_sizes=[2,3,4,'a'])
+    with pytest.raises(Exception):
+        amodel.fit(X, y, initial_step_sizes='a')
+    with pytest.raises(Exception):
+        amodel.fit(X, y, initial_step_sizes=[1,2,3,4,5])
+
+    with pytest.raises(Exception):
+        amodel.fit(X, y, parameter_limits=['a', (0,1), (0,1), (0,1)])
+    with pytest.raises(Exception):
+        amodel.fit(X, y, parameter_limits=[('a',1), (0,1), (0,1), (0,1)])
+    with pytest.raises(Exception):
+        amodel.fit(X, y, parameter_limits=[(0,1), (0,1), (0,1), (0,1), (0,1)])
+    with pytest.raises(Exception):
+        amodel.fit(X, y, parameter_limits='a')
+
+    with pytest.raises(Exception):
+        amodel.fit(X, y, parameter_fixes=['a', False, False, False])
+    with pytest.raises(Exception):
+        amodel.fit(X, y, parameter_fixes=[False, False, False, False, False])
+    with pytest.raises(Exception):
+        amodel.fit(X, y, parameter_fixes=[False, False, False])
+    with pytest.raises(Exception):
+        amodel.fit(X, y, parameter_fixes='a')
+
 def test_errors(amodel):
     amodel.estimate_errors(X)
     assert True
