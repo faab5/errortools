@@ -17,6 +17,7 @@ def amodel():
     model = errortools.LogisticRegression(fit_intercept=True, l1=0, l2=0)
     model.fit(X, y, initial_parameters=0)
     model.predict(X)
+    
     return model
 
 def test_refit(amodel):
@@ -81,3 +82,4 @@ def test_parameter_fixes(amodel):
     p = amodel.parameters
     assert p[0] == 10
     assert p[3] == 10
+

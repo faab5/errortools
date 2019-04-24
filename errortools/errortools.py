@@ -1,5 +1,8 @@
 import numpy as np
 import iminuit
+from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib.pyplot as plt
+import scipy
 
 def estimate_errors_sampling(fnc, X, p, cvr_mtx, n_samples='auto', return_covariance=False, *args, **kwargs):
     """
@@ -65,3 +68,113 @@ def estimate_errors_linear(grad, cvr_mtx, return_covariance=False):
     else:
         error = np.sqrt(np.abs([np.dot(g, np.dot(cvr_mtx, g)) for g in grad]))
         return error
+    
+def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf, pdf_name = "report.pdf"):
+    """
+    Create a PDF report with plots showing the loss versus the parabolic approximation of the loss. 
+
+    :param model: fitted model
+    :param X: [numpy.ndarray shape (n_data, n_features)] input features
+    :param y: targets for fitting
+    :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
+    :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
+    :param features: list of input feature names
+    :param pdf: PDF pages object
+    :param pdf_name: name of the PDF document
+    """
+ 
+    # TODO scale figure as such that it has the same shape as previous pages
+    # TODO check that the model provided is a fitted model
+    fig, ax = plt.subplots(round(len(features)/2), 2, figsize=(20, 10))
+    X_bias = np.concatenate((X, np.ones((X.shape[0], 1))), axis=1)
+    f0 = model.negativeLogPosterior(model.parameters, X_bias, y, l1, l2)
+
+    for p in range(0, model.parameters.shape[0]):  
+        param_minimum = model.minuit.get_param_states()[p]['value']
+        weights = np.linspace(param_minimum - 1, param_minimum + 1, 100)
+        
+        params = model.parameters.copy()
+        loss = []
+        approx = []
+
+        for w in weights:
+            params[p] = w
+            loss.append(model.negativeLogPosterior(params, X_bias, y, l1, l2))
+            parabolic_approx = params - model.parameters
+
+            approx.append(f0 + 0.5 * np.array([np.dot(parabolic_approx, np.dot(scipy.linalg.inv(model.cvr_mtx), 
+                                                                          parabolic_approx))]))
+
+        col_ind = p % 2  
+        row_ind = p // 2
+        
+        ax[row_ind ][col_ind].plot(weights, loss, '--', color='red', alpha=0.5, label="original")
+        ax[row_ind][col_ind].plot(weights, approx, '-', color='orange', alpha=0.5, label="parabolic approximation")
+        ax[row_ind][col_ind].set_xlabel(features[p])
+        ax[row_ind][col_ind].set_title("logloss")
+        ax[row_ind][col_ind].grid()
+        ax[row_ind][col_ind].legend()
+
+    if pdf == None:
+        pdf = PdfPages(pdf_name)
+
+    pdf.savefig(fig)
+    
+    return pdf
+
+def report_parameter_error(model, pdf, features, pdf_name = "report.pdf"):
+    """
+    Create a PDF report showing the estimated error per parameter. 
+
+    :param model: fitted model
+    :param pdf: PDF pages object
+    :param features: list of input feature names
+    :param pdf_name: name of the PDF document
+    """
+    
+    # TODO scale figure as such that it has the same shape as previous pages
+    # TODO check that the model provided is a fitted model
+    fig, ax = plt.subplots(1, 1, figsize=(8,4))
+    
+    ax.errorbar(x=np.arange(model.parameters.shape[0]), y=model.parameters, 
+                yerr=np.sqrt(np.diag(model.cvr_mtx)), fmt='o', color='red',  alpha=0.6, markersize=10, 
+                barsabove=True, capsize=10, label='fitted parameter value')
+    ax.grid()
+    ax.xaxis.set_ticks(np.arange(model.parameters.shape[0]))
+    ax.xaxis.set_ticklabels(features + ['bias'])
+    ax.set_xlabel("Parameters")
+    ax.set_ylabel("Fitted parameter value")
+    
+    if pdf == None:
+        pdf = PdfPages(pdf_name)
+
+    pdf.savefig(fig)
+    
+    return pdf
+
+def report_correlation_matrix(model, pdf, features, pdf_name = "report.pdf"):
+    """
+    Create a PDF report showing the estimated error per parameter. 
+
+    :param model: fitted model
+    :param pdf: PDF pages object
+    :param features: list of input feature names
+    :param pdf_name: name of the PDF document
+    """
+    
+    # TODO scale figure as such that it has the same shape as previous pages
+    # TODO check that the model provided is a fitted model
+    fig, ax = plt.subplots(1, 1, figsize=(8,4))
+    ax.axis('off')
+
+    corr_matrix = model.minuit.np_matrix(correlation=True)
+    
+    ax.table(cellText=corr_matrix, rowLabels=features, colLabels=features, loc='center')
+    ax.set_title("Correlation matrix")
+    
+    if pdf == None:
+        pdf = PdfPages(pdf_name)
+    
+    pdf.savefig(fig)
+    
+    return pdf
