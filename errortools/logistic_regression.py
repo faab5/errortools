@@ -5,22 +5,25 @@ import matplotlib.pyplot as plt
 class LogisticRegression(object):
     """
     Class for fitting, predicting and estimating error on logistic regression
+
     Quick usage:
-    - instantiate: m = LogisticRegression()
-    - fit: m.fit(X, y)
-    - predict: m.predict(X)
-    - uncertainties: dwn, up = m.estimate_errors(X)
+    - instantiate:  m = LogisticRegression()
+    - fit:          m.fit(X, y)
+    - predict:      m.predict(X)
+    - errors:       dwn, up = m.estimate_errors(X)
+
     Attributes:
-    :param self.fit_intercept: whether or not to fit the include the intercept/bias in the fit
+    :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
     :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
     :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
-    :param minuit: Minuit minimization instance
+    :param minuit: instance of the Minuit minimization class
     :param X: input features for fitting
     :param y: targets for fitting
     """
     def __init__(self, fit_intercept=True, l1=0, l2=0):
         """
         Instantiate a logistic regression
+
         :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
         :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
         :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
@@ -68,7 +71,8 @@ class LogisticRegression(object):
     @staticmethod
     def logistic(x):
         """
-        The logistic function CDF
+        Calculate the logistic function, a.k.a. sigmoid, given an input
+
         :param x: [numpy nD array] input
         :return: [numpy nD array] logistic function of the input
         """
@@ -78,7 +82,7 @@ class LogisticRegression(object):
     def negativeLogPosterior(p, X, y, l1, l2):
         """
         Calculate the negative of the log of the posterior
-        distribution over the parameters given targets and
+        distribution over parameters given targets and
         features.
         A combination of the negative log likelihood for
         classification (i.e. the log-loss), and l1 and/or l2
@@ -107,6 +111,10 @@ class LogisticRegression(object):
     @staticmethod
     def gradientNegativeLogPosterior(p, X, y, l1, l2):
         """
+        Calculate the gradient of the negative of the
+        log of the posterior distribution over parameters
+        given targets and features
+
         :param p: [numpy 1D array] parameter vector
         :param X: [numpy 2D array] feature matrix
         :param y: [numpy 1D array] target vector
@@ -136,9 +144,11 @@ class LogisticRegression(object):
             max_function_calls=10000, n_splits=1):
         """
         Fit logistic regression to feature matrix X and target vector y
+        
         If you call this method more than once, you resume a fit with
-        parameters, step sizes, limits and fixes at the end of the previous fit,
-        for each that is given as None as an argument
+        parameters, step sizes, limits and fixes as they were at the end
+        of the previous fit, for each that is given as None as an argument
+
         :param X: [numpy.ndarray shape (n_data, n_features,)] feature matrix
         :param y: [numpy.ndarray shape (n_data,)] target vector
         :param initial_parameters: [sequence of numbers, length n_features+1] initial parameter vector
@@ -245,7 +255,8 @@ class LogisticRegression(object):
 
     def predict(self, X):
         """
-        Calculates logistic scores given features X
+        Calculate the logistic scores given features X
+
         :param X: [numpy 2D array] feature matrix
         :return: [numpy 1D array] logistic regression scores
         """
@@ -255,15 +266,15 @@ class LogisticRegression(object):
       
     def estimate_errors(self, X, nstddevs=1):
         """
-        Calculate upper and lower uncertainty estimates
-        on logistic scores for given features X, based on
-        error intervals
-        The one standard deviation interval in parameter space is
-        the multi-dimensional range where the negative
-        log-likelihood goes up by 1/2
+        Estimate upper and lower uncertainties
+
+        This method is based on error intervals, where every standard
+        deviation interval in parameter space is the multi-dimensional
+        range where the negative log-likelihood goes up by 1/2
         The lower and upper errors are the maximum and minimum amount
         respectively that the logistic function goes down or up when
         taking parameters within this interval
+
         :param X: [numpy 2D array] feature matrix
         :param nstddevs: [int] error contour
         :return: [numpy 1D arrays] upper and lower error estimates
@@ -279,14 +290,13 @@ class LogisticRegression(object):
     def estimate_errors_sampling(self, X, n_samples=10000, return_covariance=False):
         """
         Estimate uncertainties via sampling the posterior
-        This is achieved by calculating the non-central variance 
-        for each data point based on sampled parameters from a multivariate
-        normal distribution and the parameters fitted by the logistic model.
+
+        Calculates the non-central variance for each input data point
+        by sampling parameters from an approximate posterior (a multivariate
+        normal distribution)
+
         :param X: [numpy 2D array] feature matrix
-        :param n_samples: [int] number of samples to draw from the distribution
-            By Hoeffding's inequality the number of samples needed to have less
-            than 1 per mille probability to deviate more than 1 per mille from
-            expectation is on the order of 1 million
+        :param n_samples: [int] number of samples to draw
         :param return_covariance: [boolean] return only error estitimes (False),
             or full covariance matrix (True) of the estimates
         :return: covariance matrix of error estimates if return_covariance
@@ -315,12 +325,11 @@ class LogisticRegression(object):
     def estimate_errors_linear(self, X, n_stddevs=1, return_covariance=False):
         """
         Estimate uncertainties via linear error propagation
-        This is a good estimate of symmetric uncertainties if the function
-        is monotonic in each dimension, which logistic function is.
-        It is fast besides. It can only give symmetric error estimates though
-        Approximates the posterior as a multivariate normal distribution with its covariance matrix C
-        Approximates the logistic function linearly with its gradients g
-        Uncertainties are then simply sqrt(g*C*g)
+        
+        Calculates the non-central variance for each input data point
+        by approximating the logistic function linearly.
+        This method is fast, but may be inaccurate
+
         :param X: [numpy 2D array] feature matrix
         :param n_stddevs: [int] number of standard deviations to estimate gradient on
             None means take exact gradient
@@ -347,8 +356,7 @@ class LogisticRegression(object):
     def _check_inputs(self, X, y=None, p=None, fit_intercept=True):
         """
         Check inputs for matching dimensions and convert to numpy arrays
-        Adds a column of ones to X if fit_intercept
-        Assures y consists of zeros and ones
+
         :param X: feature matrix
         :param p: parameter vector
         :param y: target vector
