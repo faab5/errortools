@@ -365,6 +365,49 @@ class LogisticRegression(object):
             symmetric_error = np.sqrt(np.abs([np.dot(g, np.dot(self.cvr_mtx, g)) for g in gradients]))
             return symmetric_error
 
+    def test(self, X, y, threshold=0.5, n_samples=10000):
+        """
+
+        :param X: [numpy 2D array] feature matrix
+        :param y: [numpy 1D array] target vector
+        :param threshold: [float (0 to 1)] threshold above which to predict positive
+        :return:
+        """
+        X, y = self._check_inputs(X, y)
+
+        n_data = X.shape[0]
+        n_positives = y.sum()
+        n_negatives = n_data - n_positives
+
+        scores = self.predict(X)
+        predictions = (scores > threshold).astype(int)
+
+        # TP, FP
+        # FN, TN
+
+        confusion_matrix = np.zeros((2,2), dtype=int) # shape (predicted, actual,)
+        confusion_matrix[0, 0] = predictions[y == 1].sum()
+        confusion_matrix[0, 1] = predictions[y == 0].sum()
+        confusion_matrix[1, 1] = n_negatives - confusion_matrix[0, 1]
+        confusion_matrix[1, 0] = n_positives - confusion_matrix[0, 0]
+
+        sampled_parameters = np.random.multivariate_normal(self.parameters, self.cvr_mtx, n_samples).T  # shape (npars, nsamples)
+        sampled_scores = LogisticRegression.logistic(np.dot(X, sampled_parameters))  # shape (ndata, nsamples)
+        sampled_predictions = (sampled_scores > threshold).astype(int) # shape (ndata, nsamples)
+
+        sampled_true_positives = sampled_predictions[y==1].sum(axis=0)
+        sampled_false_negatives = n_positives - sampled_true_positives
+        sampled_false_positives = sampled_predictions[y==0].sum(axis=0)
+        sampled_true_negatives = n_negatives - sampled_false_positives
+
+        confusion_matrix_errors = np.zeros((2, 2), dtype=int)  # shape (predicted, actual,)
+        confusion_matrix_errors[0, 0] = np.sqrt(np.mean(np.square(sampled_true_positives - confusion_matrix[0, 0])))
+        confusion_matrix_errors[1, 0] = np.sqrt(np.mean(np.square(sampled_false_negatives - confusion_matrix[1, 0])))
+        confusion_matrix_errors[0, 1] = np.sqrt(np.mean(np.square(sampled_false_positives - confusion_matrix[0, 1])))
+        confusion_matrix_errors[1, 1] = np.sqrt(np.mean(np.square(sampled_true_negatives - confusion_matrix[1, 1])))
+
+        
+
     def _check_inputs(self, X, y=None):
         """
         Check inputs for matching dimensions and convert to numpy arrays
