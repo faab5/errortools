@@ -69,7 +69,7 @@ def estimate_errors_linear(grad, cvr_mtx, return_covariance=False):
         error = np.sqrt(np.abs([np.dot(g, np.dot(cvr_mtx, g)) for g in grad]))
         return error
     
-def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf, pdf_name = "report.pdf"):
+def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf=None, pdf_name = "report.pdf"):
     """
     Create a PDF report with plots showing the loss versus the parabolic approximation of the loss. 
 
@@ -85,11 +85,16 @@ def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf, pdf_nam
  
     # TODO scale figure as such that it has the same shape as previous pages
     # TODO check that the model provided is a fitted model
-    fig, ax = plt.subplots(round(len(features)/2), 2, figsize=(20, 10))
+
     X_bias = np.concatenate((X, np.ones((X.shape[0], 1))), axis=1)
     f0 = model.negativeLogPosterior(model.parameters, X_bias, y, l1, l2)
+    
+    if pdf == None:
+        pdf = PdfPages(pdf_name)
 
     for p in range(0, model.parameters.shape[0]):  
+        fig, ax = plt.subplots(1, 1, figsize=(8,4))
+
         param_minimum = model.minuit.get_param_states()[p]['value']
         weights = np.linspace(param_minimum - 1, param_minimum + 1, 100)
         
@@ -102,27 +107,24 @@ def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf, pdf_nam
             loss.append(model.negativeLogPosterior(params, X_bias, y, l1, l2))
             parabolic_approx = params - model.parameters
 
-            approx.append(f0 + 0.5 * np.array([np.dot(parabolic_approx, np.dot(scipy.linalg.inv(model.cvr_mtx), 
-                                                                          parabolic_approx))]))
+            approx.append(f0 + 0.5 * np.array([np.dot(parabolic_approx, np.dot(scipy.linalg.inv(model.cvr_mtx),
+                                                                               parabolic_approx))]))
 
         col_ind = p % 2  
         row_ind = p // 2
         
-        ax[row_ind ][col_ind].plot(weights, loss, '--', color='red', alpha=0.5, label="original")
-        ax[row_ind][col_ind].plot(weights, approx, '-', color='orange', alpha=0.5, label="parabolic approximation")
-        ax[row_ind][col_ind].set_xlabel(features[p])
-        ax[row_ind][col_ind].set_title("logloss")
-        ax[row_ind][col_ind].grid()
-        ax[row_ind][col_ind].legend()
-
-    if pdf == None:
-        pdf = PdfPages(pdf_name)
-
-    pdf.savefig(fig)
+        ax.plot(weights, loss, '--', color='red', alpha=0.5, label="original")
+        ax.plot(weights, approx, '-', color='orange', alpha=0.5, label="parabolic approximation")
+        ax.set_xlabel(features[p])
+        ax.set_title("logloss")
+        ax.grid()
+        ax.legend()
+        pdf.savefig(fig)
     
     return pdf
 
-def report_parameter_error(model, pdf, features, pdf_name = "report.pdf"):
+
+def report_parameter_error(model, features,  pdf=None, pdf_name = "report.pdf"):
     """
     Create a PDF report showing the estimated error per parameter. 
 
@@ -134,6 +136,7 @@ def report_parameter_error(model, pdf, features, pdf_name = "report.pdf"):
     
     # TODO scale figure as such that it has the same shape as previous pages
     # TODO check that the model provided is a fitted model
+
     fig, ax = plt.subplots(1, 1, figsize=(8,4))
     
     ax.errorbar(x=np.arange(model.parameters.shape[0]), y=model.parameters, 
@@ -152,7 +155,7 @@ def report_parameter_error(model, pdf, features, pdf_name = "report.pdf"):
     
     return pdf
 
-def report_correlation_matrix(model, pdf, features, pdf_name = "report.pdf"):
+def report_correlation_matrix(model, features, pdf=None, pdf_name = "report.pdf"):
     """
     Create a PDF report showing the estimated error per parameter. 
 
@@ -164,6 +167,7 @@ def report_correlation_matrix(model, pdf, features, pdf_name = "report.pdf"):
     
     # TODO scale figure as such that it has the same shape as previous pages
     # TODO check that the model provided is a fitted model
+
     fig, ax = plt.subplots(1, 1, figsize=(8,4))
     ax.axis('off')
 
@@ -171,6 +175,140 @@ def report_correlation_matrix(model, pdf, features, pdf_name = "report.pdf"):
     
     ax.table(cellText=corr_matrix, rowLabels=features, colLabels=features, loc='center')
     ax.set_title("Correlation matrix")
+    
+    if pdf == None:
+        pdf = PdfPages(pdf_name)
+    
+    pdf.savefig(fig)
+    
+    return pdf
+
+def expand(point, idx, rnge):
+    """
+    Expand a numpy array and replace the values at a specified index by a range of values
+    
+    :param point: the data point to be expanded
+    :param idx: the index of the column to be replace by the values in rnge
+    :param rnge: the values to replace in the data point
+    """
+    x = np.repeat(point, len(rnge)).reshape(len(point), len(rnge)).T
+    x[:, idx] = rnge
+    return x
+
+def report_error_indivial_pred(model, sample, param, features, x_min, x_max, stepsize, pdf=None, pdf_name='report.pdf'):
+    """
+    Create a PDF report showing the estimated error for an individual data sample by varying one dimension of the parameters. 
+
+    :param model: fitted model
+    :param sample: [numpy.ndarray shape (1, n_features)] data sample 
+    :param param: the parameter that will be varied in the sample
+    :param features: list of input feature names
+    :param x_min: minimum value for the x-axis
+    :param x_max: maximum value for the x-axis
+    :param stepsize: the number of steps between x_min and x_max
+    :param pdf: PDF pages object
+    :param pdf_name: name of the PDF document
+    """
+    # TODO check that the model provided is a fitted model
+
+    fig, ax = plt.subplots(1, 1, figsize=(8,4))
+    param_index = features.index(param)
+
+    x = np.linspace(x_min, x_max, stepsize)
+    expanded_X = expand(sample, param_index, x)
+    
+    y_pred = model.predict(expanded_X)
+    el, eu = model.estimate_errors(expanded_X)
+    ax.fill_between(x, y_pred-el, y_pred+eu, alpha=0.5, color='orange')
+    ax.plot(x, y_pred, '-', color='orange')
+
+    ax.set_ylim(0,1)
+    ax.set_xlabel(param)
+    ax.set_ylabel("Probability")
+    ax.set_title("Prediction error estimation")
+    ax.grid()
+    
+    return pdf
+
+def get_positive_ratio(model, X, y, n_samples=1000, bins=20):
+    """
+    Calculate the positive ratio of the model per bin and estimate the errors
+    over these by sampling parameters from a multivariate normal distribution.
+
+    :param model: fitted model
+    :param X: [numpy.ndarray shape (n_data, n_features)] input features
+    :param y: targets for fitting
+    :param n_samples: number of samples to draw to calculate the error estimation
+    :param bins: number of bins to distribute the model scores over
+
+    """ 
+    y_pred = model.predict(X)
+    H_pred_all, bin_edges = np.histogram(y_pred, bins=bins, range=(0,1))
+    H_pred_pos, _ = np.histogram(y_pred[y==1], bins=bins, range=(0,1))
+    ratio = H_pred_pos.astype(float)/(H_pred_all+1e-12)
+    
+    p = np.random.multivariate_normal(mean=model.parameters, cov=model.cvr_mtx, size=n_samples)
+    y_pred_sampled = 1./(1.+np.exp(-np.dot(p, np.concatenate((X,np.ones((X.shape[0],1))), axis=1).T)))
+    H_sampled_all = np.array([np.histogram(p, bins=bins, range=(0,1))[0] for p in y_pred_sampled])
+    H_sampled_pos = np.array([np.histogram(p[y==1], bins=bins, range=(0,1))[0] for p in y_pred_sampled])
+    sampled_ratios = H_sampled_pos.astype(float)/(H_sampled_all+1e-12)
+    err = np.sqrt(np.mean((sampled_ratios-ratio[np.newaxis,:])**2, axis=0))
+    
+    return ratio, err, bin_edges
+
+def report_model_positive_ratio(model, X, y, n_samples, bins, pdf=None, pdf_name='report.pdf'):
+    """
+    Create a PDF report showing the model's positive ratio verus the model score. 
+
+    :param model: fitted model
+    :param X: [numpy.ndarray shape (n_data, n_features)] input features
+    :param y: targets for fitting
+    :param n_samples: number of samples to draw to calculate the error estimation
+    :param bins: number of bins to distribute the model scores over
+    :param pdf: PDF pages object
+    :param pdf_name: name of the PDF document
+    """ 
+    fig, ax = plt.subplots(1, 1, figsize=(8,4))
+
+    ratio, err, e = get_positive_ratio(model, X, y, n_samples, bins)
+
+    ax.plot([0,1], [0,1], '-', color='black')
+    ax.errorbar(x=e[:-1], y=ratio, yerr=err, fmt='o', color='orange', alpha=0.5, markersize=10, barsabove=True, capsize=10)
+    ax.grid()
+    ax.set_xlabel("model score")
+    ax.set_ylabel("positive ratio")
+    ax.set_ylim((-0.1,1.1))
+    
+    if pdf == None:
+        pdf = PdfPages(pdf_name)
+    
+    pdf.savefig(fig)
+    
+    return pdf
+
+def report_error_test_samples(model, X, pdf=None, pdf_name='report.pdf'):
+    """
+    Create a PDF report showing the estimated error on the provided test samples.
+    These are ordered by the prediction score.
+
+    :param model: fitted model
+    :param X: [numpy.ndarray shape (n_data, n_features)] input features
+    :param pdf: PDF pages object
+    :param pdf_name: name of the PDF document
+    """ 
+    fig, ax = plt.subplots(1, 1, figsize=(8,4))
+    x = np.linspace(0, len(X), len(X))
+
+    y_pred = model.predict(X)
+    el, eu = model.estimate_errors(X)
+    s_pred, s_el, s_eu = (np.asarray(list(t)) for t in zip(*sorted(zip(y_pred, el, eu), reverse=True)))
+    ax.fill_between(x, s_pred-s_el, s_pred+s_eu, alpha=0.5, color='orange')
+    ax.plot(x, s_pred, '-', color='orange')
+
+    ax.set_ylim(0,1)
+    ax.set_xlabel("Test sample (ordered by prediction score)")
+    ax.set_ylabel("Prediction probability")
+    ax.grid()
     
     if pdf == None:
         pdf = PdfPages(pdf_name)

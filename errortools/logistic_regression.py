@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 class LogisticRegression(object):
     """
     Class for fitting, predicting and estimating error on logistic regression
-
     Quick usage:
     - instantiate:  m = LogisticRegression()
     - fit:          m.fit(X, y)
@@ -23,7 +22,6 @@ class LogisticRegression(object):
     def __init__(self, fit_intercept=True, l1=0, l2=0):
         """
         Instantiate a logistic regression
-
         :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
         :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
         :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
@@ -72,8 +70,8 @@ class LogisticRegression(object):
     def logistic(x):
         """
         Calculate the logistic function, a.k.a. sigmoid, given an input
-
-        :param x: [numpy nD array] input
+        
+	:param x: [numpy nD array] input
         :return: [numpy nD array] logistic function of the input
         """
         return 1. / (1. + np.exp(-x))
@@ -274,7 +272,6 @@ class LogisticRegression(object):
         The lower and upper errors are the maximum and minimum amount
         respectively that the logistic function goes down or up when
         taking parameters within this interval
-
         :param X: [numpy 2D array] feature matrix
         :param nstddevs: [int] error contour
         :return: [numpy 1D arrays] upper and lower error estimates
@@ -356,8 +353,8 @@ class LogisticRegression(object):
     def _check_inputs(self, X, y=None, p=None, fit_intercept=True):
         """
         Check inputs for matching dimensions and convert to numpy arrays
-
-        :param X: feature matrix
+        
+	:param X: feature matrix
         :param p: parameter vector
         :param y: target vector
         :param fit_intercept: whether to fit the intercept

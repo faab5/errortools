@@ -26,14 +26,14 @@ def amodel():
 
 def test_report_correlation(amodel):
     with PdfPages('Report.pdf') as pdf:
-        errortools.report_correlation_matrix(amodel, pdf, features)
+        errortools.report_correlation_matrix(amodel, features, pdf)
         
     assert os.path.isfile('Report.pdf') == True
     assert os.path.isfile('Reports.pdf') == False
 
 def test_report_parameter_error(amodel):
     with PdfPages('Report.pdf') as pdf:
-        errortools.report_parameter_error(amodel, pdf, features)
+        errortools.report_parameter_error(amodel, features, pdf)
         
     assert os.path.isfile('Report.pdf') == True
     assert os.path.isfile('Reports.pdf') == False
@@ -42,5 +42,26 @@ def test_report_loss_versus_approximation(amodel):
     with PdfPages('Report.pdf') as pdf:
         errortools.report_loss_versus_approximation(amodel, X, y, 0, 0, features, pdf)
 
+    assert os.path.isfile('Report.pdf') == True
+    assert os.path.isfile('Reports.pdf') == False
+    
+def test_report_error_indivial_pred(amodel):
+    with PdfPages('Report.pdf') as pdf:
+        errortools.report_error_indivial_pred(amodel, X[0], 'x2', features, 0, 20, 100, pdf)
+    
+    assert os.path.isfile('Report.pdf') == True
+    assert os.path.isfile('Reports.pdf') == False
+    
+def test_report_model_positive_ratio(amodel):
+    with PdfPages('Report.pdf') as pdf:
+        errortools.report_model_positive_ratio(amodel, X, y, 1000, 10, pdf)
+        
+    assert os.path.isfile('Report.pdf') == True
+    assert os.path.isfile('Reports.pdf') == False
+    
+def test_report_error_test_samples(amodel):
+    with PdfPages('Report.pdf') as pdf:
+        errortools.report_error_test_samples(amodel, X, pdf)
+    
     assert os.path.isfile('Report.pdf') == True
     assert os.path.isfile('Reports.pdf') == False
