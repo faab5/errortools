@@ -1,10 +1,12 @@
+import os
 from setuptools import setup, find_packages
 
-with open('requirements.txt') as f:
-    requirements = f.read().splitlines()
+def read(fname):
+    return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
-with open("README.rst", "r") as fh:
-    long_description = fh.read()
+
+base_packages = ["numpy", "scipy", "scikit-learn",
+                 "pandas", "matplotlib", "jupyter"]
 
 setup(
     name='errortools',
@@ -12,10 +14,10 @@ setup(
     author="Fabian Jansen",
     author_email="faab5jansen@gmail.com",
     description="Tools for estimating errors",
-    long_description=long_description,
+    long_description=read('README.rst'),
     long_description_content_type="text/x-rst",
     packages=find_packages(),
-    install_requires=requirements,
+    install_requires=base_packages,
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
