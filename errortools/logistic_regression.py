@@ -381,7 +381,6 @@ class LogisticRegression(object):
 
         if self.minuit is not None:
             p = self.minuit.np_values()
-            print(p)
 
             if X.shape[1] + int(self.fit_intercept) == p.shape[0]:
                 pass
