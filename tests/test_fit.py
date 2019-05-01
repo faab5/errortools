@@ -81,4 +81,3 @@ def test_parameter_fixes(amodel):
     p = amodel.parameters
     assert p[0] == 10
     assert p[3] == 10
-
