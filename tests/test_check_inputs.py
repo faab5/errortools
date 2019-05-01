@@ -1,74 +1,45 @@
 import errortools
 import numpy as np
+import pytest
+import scipy.stats
 
 np.random.seed(42)
-estimator = errortools.LogisticRegression()
 
-def test_all_inputs_as_arrays():
-    X = np.random.uniform(size=4 * 3).reshape(4,3)
-    p = np.random.uniform(size=3)
-    y = np.random.choice([0,1], size=4)
-    Xp, yp, wp = estimator._check_inputs(X, y, p, False)
-    assert wp.shape[0] == Xp.shape[1]
-    assert yp.shape[0] == Xp.shape[0]
+@pytest.fixture
+def non_fitted_model():
+    model = errortools.LogisticRegression(fit_intercept=True, l1=0, l2=0)
+    return model
 
-def test_weights_as_number_no_bias():
+@pytest.fixture
+def fitted_model():
+    X = np.random.uniform(low=-1, high=1, size=100*2).reshape((100, 2))
+    y = np.random.choice([0,1], size=100)
+    model = errortools.LogisticRegression(fit_intercept=True, l1=0, l2=0)
+    model.fit(X, y, initial_parameters=0)
+    return model
+
+
+
+def test_not_fitted_features_and_target_1(non_fitted_model):
     X = np.random.uniform(size=4 * 3).reshape(4, 3)
-    p = 0
-    y = np.random.choice([0,1], size=4)
-    Xp, yp, wp = estimator._check_inputs(X, y, p, False)
-    assert wp.shape[0] == Xp.shape[1]
-    assert yp.shape[0] == Xp.shape[0]
+    y = np.random.choice([0, 1], size=4)
+    U, v = non_fitted_model._check_inputs(X, y)
+    assert v.shape[0] == U.shape[0]
 
-def test_weights_as_number_with_bias():
-    X = np.random.uniform(size=4 * 3).reshape(4, 3)
-    p = 0
-    y = np.random.choice([0,1], size=4)
-    Xp, yp, wp = estimator._check_inputs(X, y, p, True)
-    assert wp.shape[0] == Xp.shape[1]
-    assert yp.shape[0] == Xp.shape[0]
+def test_not_fitted_features_and_target_2(non_fitted_model):
+    X = np.random.uniform(size=4)
+    y = np.random.choice([0, 1], size=4)
+    U, v = non_fitted_model._check_inputs(X, y)
+    assert v.shape[0] == U.shape[0]
 
-def test_one_data_point():
-    X = np.random.uniform(size=3)
-    p = np.random.uniform(size=3)
-    y = 1
-    Xp, yp, wp = estimator._check_inputs(X, y, p, False)
-    assert wp.shape[0] == Xp.shape[1]
-    assert yp.shape[0] == Xp.shape[0]
+def test_fitted_features_and_target(fitted_model):
+    X = np.random.uniform(size=4*2).reshape(4, 2)
+    y = np.random.choice([0, 1], size=4)
+    U, v = fitted_model._check_inputs(X, y)
+    assert v.shape[0] == U.shape[0]
+    assert U.shape[1] == fitted_model.parameters.shape[0]
 
-def test_one_data_point_and_weight_as_number():
-    X = np.random.uniform(size=3)
-    p = 0
-    y = 1
-    Xp, yp, wp = estimator._check_inputs(X, y, p, True)
-    assert wp.shape[0] == Xp.shape[1]
-    assert yp.shape[0] == Xp.shape[0]
-
-def test_features_as_1D_array():
-    X = np.random.uniform(size=3)
-    p = 0
-    y = np.random.choice([0,1], size=3)
-    Xp, yp, wp = estimator._check_inputs(X, y, p, True)
-    assert wp.shape[0] == Xp.shape[1]
-    assert yp.shape[0] == Xp.shape[0]
-
-def test_no_targets_no_bias():
-    X = np.random.uniform(size=2*3).reshape(2,3)
-    p = np.random.uniform(size=3)
-    y = None
-    Xp, _, wp = estimator._check_inputs(X, y, p, False)
-    assert wp.shape[0] == Xp.shape[1]
-
-def test_no_target_and_features_as_1D_array():
-    X = np.random.uniform(size=3)
-    p = np.random.uniform(size=4)
-    y = None
-    Xp, _, wp= estimator._check_inputs(X, y, p, True)
-    assert wp.shape[0] == Xp.shape[1]
-
-def test_no_target_and_features_as_1D_array_and_weights_as_number():
-    X = np.random.uniform(size=3)
-    p = 0
-    y = None
-    Xp, _, wp = estimator._check_inputs(X, y, p, True)
-    assert wp.shape[0] == Xp.shape[1]
+def test_fitted_features_no_target(fitted_model):
+    X = np.random.uniform(size=2)
+    U, v = fitted_model._check_inputs(X, None)
+    assert U.shape[1] == fitted_model.parameters.shape[0]

@@ -17,7 +17,6 @@ def amodel():
     model = errortools.LogisticRegression(fit_intercept=True, l1=0, l2=0)
     model.fit(X, y, initial_parameters=0)
     model.predict(X)
-    
     return model
 
 def test_refit(amodel):
