@@ -170,14 +170,13 @@ class LogisticRegression(object):
         :param n_splits: [integer] split fit in to n_splits runs. Fitting stops when it found the function
             minimum to be valid or n_calls is reached
         """
+        self.X, self.y = self._check_inputs(X, y)
 
         if self.minuit is None or\
             initial_parameters is not None or\
             initial_step_sizes is not None or\
             parameter_limits is not None or\
             parameter_fixes is not None:
-
-            self.X, self.y = self._check_inputs(X, y)
 
             if initial_parameters is None:
                 if self.minuit is not None:
