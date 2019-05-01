@@ -69,7 +69,7 @@ def estimate_errors_linear(grad, cvr_mtx, return_covariance=False):
         error = np.sqrt(np.abs([np.dot(g, np.dot(cvr_mtx, g)) for g in grad]))
         return error
     
-def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf=None, pdf_name = "report.pdf"):
+def report_loss_versus_approximation(model, X, y, features, pdf=None, pdf_name = "report.pdf"):
     """
     Create a PDF report with plots showing the loss versus the parabolic approximation of the loss. 
 
@@ -87,7 +87,7 @@ def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf=None, pd
     # TODO check that the model provided is a fitted model
 
     X_bias = np.concatenate((X, np.ones((X.shape[0], 1))), axis=1)
-    f0 = model.negativeLogPosterior(model.parameters, X_bias, y, l1, l2)
+    f0 = model.negative_log_posterior(model.parameters, X_bias, y)
     
     if pdf == None:
         pdf = PdfPages(pdf_name)
@@ -104,7 +104,7 @@ def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf=None, pd
 
         for w in weights:
             params[p] = w
-            loss.append(model.negativeLogPosterior(params, X_bias, y, l1, l2))
+            loss.append(model.negative_log_posterior(params, X_bias, y))
             parabolic_approx = params - model.parameters
 
             approx.append(f0 + 0.5 * np.array([np.dot(parabolic_approx, np.dot(scipy.linalg.inv(model.cvr_mtx),

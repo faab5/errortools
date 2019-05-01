@@ -71,13 +71,12 @@ class LogisticRegression(object):
         """
         Calculate the logistic function, a.k.a. sigmoid, given an input
         
-	:param x: [numpy nD array] input
+        :param x: [numpy nD array] input
         :return: [numpy nD array] logistic function of the input
         """
         return 1. / (1. + np.exp(-x))
 
-    @staticmethod
-    def negativeLogPosterior(p, X, y, l1, l2):
+    def negative_log_posterior(self, p, X, y):
         """
         Calculate the negative of the log of the posterior
         distribution over parameters given targets and
@@ -88,8 +87,6 @@ class LogisticRegression(object):
         :param p: [numpy 1D array] parameter vector
         :param X: [numpy 2D array] feature matrix
         :param y: [numpy 1D array] target vector
-        :param l1: [float or numpy 1D array] l1 regularization parameter
-        :param l2: [float or numpy 2D array] l2 regularization parameter
         :return: negative log posterior of parameters given data
         """
         # predictions on train set with given parameters
@@ -98,16 +95,15 @@ class LogisticRegression(object):
         # negative log-likelihood of predictions
         nll = -np.sum(y*np.log(y_pred+1e-16) + (1-y)*np.log(1-y_pred+1e-16))
 
-        if l1 == 0 and l2 == 0:
+        if self.l1 == 0 and self.l2 == 0:
             return nll
 
         # negative log-prior of parameters
-        nlp = np.sum(np.abs(l1 * p)) + 0.5 * np.sum(l2 * p**2)
+        nlp = np.sum(np.abs(self.l1 * p)) + 0.5 * np.sum(self.l2 * p**2)
 
         return nll + nlp
 
-    @staticmethod
-    def gradientNegativeLogPosterior(p, X, y, l1, l2):
+    def gradient_negative_log_posterior(self, p, X, y):
         """
         Calculate the gradient of the negative of the
         log of the posterior distribution over parameters
@@ -116,8 +112,6 @@ class LogisticRegression(object):
         :param p: [numpy 1D array] parameter vector
         :param X: [numpy 2D array] feature matrix
         :param y: [numpy 1D array] target vector
-        :param l1: [float or numpy 1D array] l1 regularization parameter
-        :param l2: [float or numpy 2D array] l2 regularization parameter
         :return: gradient with respect to the parameters of the negative
             log posterior
         """
@@ -127,11 +121,11 @@ class LogisticRegression(object):
         # gradient negative log-likelihood
         gnll = np.sum((y_pred-y)[:,np.newaxis] * X, axis=0)
 
-        if l1 == 0 and l2 == 0:
+        if self.l1 == 0 and self.l2 == 0:
             return gnll
 
         # gradient of negative log-prior
-        gnlp = l1 * np.sign(p) + l2 * p
+        gnlp = self.l1 * np.sign(p) + self.l2 * p
 
         return gnll + gnlp
 
@@ -232,10 +226,10 @@ class LogisticRegression(object):
                 parameter_fixes = [state['is_fixed'] for state in self.minuit.get_param_states()]
 
             # define function to be minimized
-            fcn = lambda p: self.negativeLogPosterior(p, self.X, self.y, self.l1, self.l2)
+            fcn = lambda p: self.negative_log_posterior(p, self.X, self.y)
 
             # define the gradient of the function to be minimized
-            grd = lambda p: self.gradientNegativeLogPosterior(p, self.X, self.y, self.l1, self.l2)
+            grd = lambda p: self.gradient_negative_log_posterior(p, self.X, self.y)
 
             # initiate minuit minimizer
             self.minuit = iminuit.Minuit.from_array_func(fcn=fcn,
