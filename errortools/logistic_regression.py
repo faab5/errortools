@@ -103,6 +103,9 @@ class LogisticRegression(object):
 
         return nll + nlp
 
+    # alias
+    loss = negative_log_posterior
+
     def gradient_negative_log_posterior(self, p, X, y):
         """
         Calculate the gradient of the negative of the
@@ -128,6 +131,9 @@ class LogisticRegression(object):
         gnlp = self.l1 * np.sign(p) + self.l2 * p
 
         return gnll + gnlp
+
+    # alias
+    grad_loss = gradient_negative_log_posterior
 
     def fit(self, X, y,
             initial_parameters=None, initial_step_sizes=None,
