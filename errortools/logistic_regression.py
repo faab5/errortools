@@ -9,7 +9,7 @@ class LogisticRegression(object):
     - instantiate:  m = LogisticRegression()
     - fit:          m.fit(X, y)
     - predict:      m.predict(X)
-    - errors:       dwn, up = m.prediction_errors_from_interval(X)
+    - errors:       dwn, up = m.prediction_errors(X)
 
     Attributes:
     :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
@@ -276,6 +276,13 @@ class LogisticRegression(object):
     def prediction_errors(self, X, method="interval", **kwargs):
         """
         Estimate asymmetric errors on predictions
+
+        All methods rely on a multivariate Gaussian approximation of the likelihood around the maximum
+        - The interval method finds the minimum and maximum prediction values, when parameters are taken
+            from within uncertainty ellipses around the maximum likely parameters
+        - The sampling method samples the full mv-Gaussian to calculate the variance of the prediction
+        - The linear method approximates the prediction linearly around the maximum parameters,
+            so that the variance of the prediction is simple vector arithmetic
 
         :param X:
         :param method: [str] method to use
