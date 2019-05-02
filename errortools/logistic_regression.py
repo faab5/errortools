@@ -9,7 +9,7 @@ class LogisticRegression(object):
     - instantiate:  m = LogisticRegression()
     - fit:          m.fit(X, y)
     - predict:      m.predict(X)
-    - errors:       dwn, up = m.estimate_errors(X)
+    - errors:       dwn, up = m.estimate_errors_interval(X)
 
     Attributes:
     :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
@@ -272,8 +272,19 @@ class LogisticRegression(object):
         X, _ = self._check_inputs(X, None)
         y_pred = LogisticRegression.logistic(X.dot(self.parameters))
         return y_pred
+
+    def prediction_errors(self, X, method="from_interval", *args, **kwargs):
+        """
+
+        :param X:
+        "param method:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        pass
       
-    def estimate_errors(self, X, nstddevs=1):
+    def estimate_errors_interval(self, X, nstddevs=1):
         """
         Estimate upper and lower uncertainties
 

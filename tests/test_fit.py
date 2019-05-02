@@ -56,7 +56,7 @@ def test_refit(amodel):
         amodel.fit(X, y, parameter_fixes='a')
 
 def test_errors(amodel):
-    amodel.estimate_errors(X)
+    amodel.estimate_errors_interval(X)
     assert True
 
 def test_errors_sampling(amodel):

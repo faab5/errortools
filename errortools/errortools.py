@@ -218,7 +218,7 @@ def report_error_indivial_pred(model, sample, param, features, x_min, x_max, ste
     expanded_X = expand(sample, param_index, x)
     
     y_pred = model.predict(expanded_X)
-    el, eu = model.estimate_errors(expanded_X)
+    el, eu = model.estimate_errors_interval(expanded_X)
     ax.fill_between(x, y_pred-el, y_pred+eu, alpha=0.5, color='orange')
     ax.plot(x, y_pred, '-', color='orange')
 
@@ -300,7 +300,7 @@ def report_error_test_samples(model, X, pdf=None, pdf_name='report.pdf'):
     x = np.linspace(0, len(X), len(X))
 
     y_pred = model.predict(X)
-    el, eu = model.estimate_errors(X)
+    el, eu = model.estimate_errors_interval(X)
     s_pred, s_el, s_eu = (np.asarray(list(t)) for t in zip(*sorted(zip(y_pred, el, eu), reverse=True)))
     ax.fill_between(x, s_pred-s_el, s_pred+s_eu, alpha=0.5, color='orange')
     ax.plot(x, s_pred, '-', color='orange')
