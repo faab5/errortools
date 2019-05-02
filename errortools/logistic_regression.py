@@ -1,6 +1,6 @@
 import numpy as np
 import iminuit
-import matplotlib.pyplot as plt
+import scipy.stats
 
 class LogisticRegression(object):
     """
@@ -66,16 +66,6 @@ class LogisticRegression(object):
             raise RuntimeError("Fit before access to fit parameters")
         return self.minuit.np_matrix()
 
-    @staticmethod
-    def logistic(x):
-        """
-        Calculate the logistic function, a.k.a. sigmoid, given an input
-        
-        :param x: [numpy nD array] input
-        :return: [numpy nD array] logistic function of the input
-        """
-        return 1. / (1. + np.exp(-x))
-
     def negative_log_posterior(self, p, X, y):
         """
         Calculate the negative of the log of the posterior
@@ -90,7 +80,7 @@ class LogisticRegression(object):
         :return: negative log posterior of parameters given data
         """
         # predictions on train set with given parameters
-        y_pred = LogisticRegression.logistic(X.dot(p))
+        y_pred = scipy.stats.logistic.cdf(X.dot(p))
 
         # negative log-likelihood of predictions
         nll = -np.sum(y*np.log(y_pred+1e-16) + (1-y)*np.log(1-y_pred+1e-16))
@@ -119,7 +109,7 @@ class LogisticRegression(object):
             log posterior
         """
         # predictions on train set with given parameters
-        y_pred = LogisticRegression.logistic(X.dot(p))
+        y_pred = scipy.stats.logistic.cdf(X.dot(p))
 
         # gradient negative log-likelihood
         gnll = np.sum((y_pred-y)[:,np.newaxis] * X, axis=0)
@@ -270,7 +260,7 @@ class LogisticRegression(object):
         :return: [numpy 1D array] logistic regression scores
         """
         X, _ = self._check_inputs(X, None)
-        y_pred = LogisticRegression.logistic(X.dot(self.parameters))
+        y_pred = scipy.stats.logistic.cdf(X.dot(self.parameters))
         return y_pred
 
     def prediction_errors(self, X, method="interval", **kwargs):
@@ -321,9 +311,9 @@ class LogisticRegression(object):
         X, _ = self._check_inputs(X, None)
         mid = X.dot(self.parameters)
         delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
-        y_pred = LogisticRegression.logistic(mid)
-        upper = LogisticRegression.logistic(mid + n_stddevs * delta) - y_pred
-        lower = y_pred - LogisticRegression.logistic(mid - n_stddevs * delta)
+        y_pred = scipy.stats.logistic.cdf(mid)
+        upper = scipy.stats.logistic.cdf(mid + n_stddevs * delta) - y_pred
+        lower = y_pred - scipy.stats.logistic.cdf(mid - n_stddevs * delta)
         return lower, upper
     
     def prediction_errors_from_sampling(self, X, n_samples=10000, return_covariance=False):
@@ -349,8 +339,8 @@ class LogisticRegression(object):
         sampled_parameters = np.random.multivariate_normal(self.parameters, self.cvr_mtx, n_samples).T # shape (npars, nsamples,)
         fitted_parameters = np.tile(self.parameters, (n_samples, 1)).T # shape (npars, nsamples,)
 
-        sigmoid_sampled_parameters = LogisticRegression.logistic(X.dot(sampled_parameters)) # shape (ndata, nsamples,)
-        sigmoid_fitted_parameters = LogisticRegression.logistic(X.dot(fitted_parameters)) # shape (ndata, nsamples,)
+        sigmoid_sampled_parameters = scipy.stats.logistic.cdf(X.dot(sampled_parameters)) # shape (ndata, nsamples,)
+        sigmoid_fitted_parameters = scipy.stats.logistic.cdf(X.dot(fitted_parameters)) # shape (ndata, nsamples,)
         sigmoid_variation = sigmoid_sampled_parameters - sigmoid_fitted_parameters  # shape (ndata, nsamples,)
 
         if return_covariance == True:
@@ -377,7 +367,7 @@ class LogisticRegression(object):
         """
         X, _ = self._check_inputs(X, None)
 
-        fcn = lambda p: LogisticRegression.logistic(X.dot(p))
+        fcn = lambda p: scipy.stats.logistic.cdf(X.dot(p))
 
         if isinstance(n_stddevs, (float, int,)):
             gradients = np.array([(fcn(self.parameters + n_stddevs*u) - fcn(self.parameters - n_stddevs*u)) \
