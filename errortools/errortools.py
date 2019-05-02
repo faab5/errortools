@@ -4,7 +4,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import scipy
 
-def estimate_errors_sampling(fnc, X, p, cvr_mtx, n_samples='auto', return_covariance=False, *args, **kwargs):
+def errors_from_sampling(fnc, X, p, cvr_mtx, n_samples='auto', return_covariance=False, *args, **kwargs):
     """
     Estimate uncertainties via sampling the posterior
 
@@ -41,7 +41,7 @@ def estimate_errors_sampling(fnc, X, p, cvr_mtx, n_samples='auto', return_covari
         error = np.sqrt(np.mean(np.square(function_variation), axis=1))  # shape (ndata,)
         return error
 
-def estimate_errors_linear(grad, cvr_mtx, return_covariance=False):
+def errors_from_linear_error_propagation(grad, cvr_mtx, return_covariance=False):
     """
     Estimate uncertainties via linear error propagation
 
@@ -69,7 +69,7 @@ def estimate_errors_linear(grad, cvr_mtx, return_covariance=False):
         error = np.sqrt(np.abs([np.dot(g, np.dot(cvr_mtx, g)) for g in grad]))
         return error
     
-def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf=None, pdf_name = "report.pdf"):
+def report_loss_versus_approximation(model, X, y, features, pdf=None, pdf_name = "report.pdf"):
     """
     Create a PDF report with plots showing the loss versus the parabolic approximation of the loss. 
 
@@ -87,7 +87,7 @@ def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf=None, pd
     # TODO check that the model provided is a fitted model
 
     X_bias = np.concatenate((X, np.ones((X.shape[0], 1))), axis=1)
-    f0 = model.negativeLogPosterior(model.parameters, X_bias, y, l1, l2)
+    f0 = model.negative_log_posterior(model.parameters, X_bias, y)
     
     if pdf == None:
         pdf = PdfPages(pdf_name)
@@ -104,7 +104,7 @@ def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf=None, pd
 
         for w in weights:
             params[p] = w
-            loss.append(model.negativeLogPosterior(params, X_bias, y, l1, l2))
+            loss.append(model.negative_log_posterior(params, X_bias, y))
             parabolic_approx = params - model.parameters
 
             approx.append(f0 + 0.5 * np.array([np.dot(parabolic_approx, np.dot(scipy.linalg.inv(model.cvr_mtx),
@@ -221,7 +221,7 @@ def report_error_indivial_pred(model, sample, param, features, x_min, x_max, ste
     expanded_X = expand(sample, param_index, x)
     
     y_pred = model.predict(expanded_X)
-    el, eu = model.estimate_errors(expanded_X)
+    el, eu = model.prediction_errors_from_interval(expanded_X)
     ax.fill_between(x, y_pred-el, y_pred+eu, alpha=0.5, color='orange')
     ax.plot(x, y_pred, '-', color='orange')
 
@@ -305,7 +305,7 @@ def report_error_test_samples(model, X, pdf=None, pdf_name='report.pdf', figsize
     x = np.linspace(0, len(X), len(X))
 
     y_pred = model.predict(X)
-    el, eu = model.estimate_errors(X)
+    el, eu = model.prediction_errors_from_interval(X)
     s_pred, s_el, s_eu = (np.asarray(list(t)) for t in zip(*sorted(zip(y_pred, el, eu), reverse=True)))
     ax.fill_between(x, s_pred-s_el, s_pred+s_eu, alpha=0.5, color='orange')
     ax.plot(x, s_pred, '-', color='orange')

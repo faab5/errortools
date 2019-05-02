@@ -9,7 +9,7 @@ class LogisticRegression(object):
     - instantiate:  m = LogisticRegression()
     - fit:          m.fit(X, y)
     - predict:      m.predict(X)
-    - errors:       dwn, up = m.estimate_errors(X)
+    - errors:       dwn, up = m.prediction_errors(X)
 
     Attributes:
     :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
@@ -71,13 +71,12 @@ class LogisticRegression(object):
         """
         Calculate the logistic function, a.k.a. sigmoid, given an input
         
-	:param x: [numpy nD array] input
+        :param x: [numpy nD array] input
         :return: [numpy nD array] logistic function of the input
         """
         return 1. / (1. + np.exp(-x))
 
-    @staticmethod
-    def negativeLogPosterior(p, X, y, l1, l2):
+    def negative_log_posterior(self, p, X, y):
         """
         Calculate the negative of the log of the posterior
         distribution over parameters given targets and
@@ -88,8 +87,6 @@ class LogisticRegression(object):
         :param p: [numpy 1D array] parameter vector
         :param X: [numpy 2D array] feature matrix
         :param y: [numpy 1D array] target vector
-        :param l1: [float or numpy 1D array] l1 regularization parameter
-        :param l2: [float or numpy 2D array] l2 regularization parameter
         :return: negative log posterior of parameters given data
         """
         # predictions on train set with given parameters
@@ -98,16 +95,18 @@ class LogisticRegression(object):
         # negative log-likelihood of predictions
         nll = -np.sum(y*np.log(y_pred+1e-16) + (1-y)*np.log(1-y_pred+1e-16))
 
-        if l1 == 0 and l2 == 0:
+        if self.l1 == 0 and self.l2 == 0:
             return nll
 
         # negative log-prior of parameters
-        nlp = np.sum(np.abs(l1 * p)) + 0.5 * np.sum(l2 * p**2)
+        nlp = np.sum(np.abs(self.l1 * p)) + 0.5 * np.sum(self.l2 * p**2)
 
         return nll + nlp
 
-    @staticmethod
-    def gradientNegativeLogPosterior(p, X, y, l1, l2):
+    # alias
+    loss = negative_log_posterior
+
+    def gradient_negative_log_posterior(self, p, X, y):
         """
         Calculate the gradient of the negative of the
         log of the posterior distribution over parameters
@@ -116,8 +115,6 @@ class LogisticRegression(object):
         :param p: [numpy 1D array] parameter vector
         :param X: [numpy 2D array] feature matrix
         :param y: [numpy 1D array] target vector
-        :param l1: [float or numpy 1D array] l1 regularization parameter
-        :param l2: [float or numpy 2D array] l2 regularization parameter
         :return: gradient with respect to the parameters of the negative
             log posterior
         """
@@ -127,13 +124,16 @@ class LogisticRegression(object):
         # gradient negative log-likelihood
         gnll = np.sum((y_pred-y)[:,np.newaxis] * X, axis=0)
 
-        if l1 == 0 and l2 == 0:
+        if self.l1 == 0 and self.l2 == 0:
             return gnll
 
         # gradient of negative log-prior
-        gnlp = l1 * np.sign(p) + l2 * p
+        gnlp = self.l1 * np.sign(p) + self.l2 * p
 
         return gnll + gnlp
+
+    # alias
+    grad_loss = gradient_negative_log_posterior
 
     def fit(self, X, y,
             initial_parameters=None, initial_step_sizes=None,
@@ -232,10 +232,10 @@ class LogisticRegression(object):
                 parameter_fixes = [state['is_fixed'] for state in self.minuit.get_param_states()]
 
             # define function to be minimized
-            fcn = lambda p: self.negativeLogPosterior(p, self.X, self.y, self.l1, self.l2)
+            fcn = lambda p: self.negative_log_posterior(p, self.X, self.y)
 
             # define the gradient of the function to be minimized
-            grd = lambda p: self.gradientNegativeLogPosterior(p, self.X, self.y, self.l1, self.l2)
+            grd = lambda p: self.gradient_negative_log_posterior(p, self.X, self.y)
 
             # initiate minuit minimizer
             self.minuit = iminuit.Minuit.from_array_func(fcn=fcn,
@@ -272,8 +272,39 @@ class LogisticRegression(object):
         X, _ = self._check_inputs(X, None)
         y_pred = LogisticRegression.logistic(X.dot(self.parameters))
         return y_pred
-      
-    def estimate_errors(self, X, nstddevs=1):
+
+    def prediction_errors(self, X, method="interval", **kwargs):
+        """
+        Estimate asymmetric errors on predictions
+
+        All methods rely on a multivariate Gaussian approximation of the likelihood around the maximum
+        - The interval method finds the minimum and maximum prediction values, when parameters are taken
+            from within uncertainty ellipses around the maximum likely parameters
+        - The sampling method samples the full mv-Gaussian to calculate the variance of the prediction
+        - The linear method approximates the prediction linearly around the maximum parameters,
+            so that the variance of the prediction is simple vector arithmetic
+
+        :param X:
+        :param method: [str] method to use
+            One out of interval (default), asmpling, or linear_error_propagation
+            See methods for details
+        :param kwargs: keyword arguments passed onto method
+            Possibilities are n_samples, and n_stddevs
+            Defaults apply if empty
+        :return: [(numpy 1D array, numpy 1D array,)] lower and upper error estimates
+        """
+        if method == "sampling":
+            kwargs =  {key: kwargs[key] for key in ('n_samples',) if key in kwargs.keys()}
+            lower = upper = self.prediction_errors_from_sampling(X, return_covariance=False, **kwargs)
+        elif method == "linear_error_propagation" or method == "linear":
+            kwargs =  {key: kwargs[key] for key in ('n_stddevs',) if key in kwargs.keys()}
+            lower = upper = self.prediction_errors_from_linear_error_propagation(X, return_covariance=False, **kwargs)
+        else:
+            kwargs = {key: kwargs[key] for key in ('n_stddevs',) if key in kwargs.keys()}
+            lower, upper =  self.prediction_errors_from_interval(X, **kwargs)
+        return lower, upper
+
+    def prediction_errors_from_interval(self, X, n_stddevs=1):
         """
         Estimate upper and lower uncertainties
 
@@ -285,17 +316,17 @@ class LogisticRegression(object):
         taking parameters within this interval
         :param X: [numpy 2D array] feature matrix
         :param nstddevs: [int] error contour
-        :return: [numpy 1D arrays] upper and lower error estimates
+        :return: [numpy 1D arrays] lower and upper error estimates
         """
         X, _ = self._check_inputs(X, None)
         mid = X.dot(self.parameters)
         delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
         y_pred = LogisticRegression.logistic(mid)
-        upper = LogisticRegression.logistic(mid + nstddevs * delta) - y_pred
-        lower = y_pred - LogisticRegression.logistic(mid - nstddevs * delta)
+        upper = LogisticRegression.logistic(mid + n_stddevs * delta) - y_pred
+        lower = y_pred - LogisticRegression.logistic(mid - n_stddevs * delta)
         return lower, upper
     
-    def estimate_errors_sampling(self, X, n_samples=10000, return_covariance=False):
+    def prediction_errors_from_sampling(self, X, n_samples=10000, return_covariance=False):
         """
         Estimate uncertainties via sampling the posterior
 
@@ -330,7 +361,7 @@ class LogisticRegression(object):
             symmetric_error = np.sqrt(np.abs(var))
             return symmetric_error
 
-    def estimate_errors_linear(self, X, n_stddevs=1, return_covariance=False):
+    def prediction_errors_from_linear_error_propagation(self, X, n_stddevs=1, return_covariance=False):
         """
         Estimate uncertainties via linear error propagation
         
