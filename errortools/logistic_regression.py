@@ -9,7 +9,7 @@ class LogisticRegression(object):
     - instantiate:  m = LogisticRegression()
     - fit:          m.fit(X, y)
     - predict:      m.predict(X)
-    - errors:       dwn, up = m.estimate_errors_interval(X)
+    - errors:       dwn, up = m.prediction_errors_from_interval(X)
 
     Attributes:
     :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
@@ -284,7 +284,7 @@ class LogisticRegression(object):
         """
         pass
       
-    def estimate_errors_interval(self, X, nstddevs=1):
+    def prediction_errors_from_interval(self, X, nstddevs=1):
         """
         Estimate upper and lower uncertainties
 
@@ -306,7 +306,7 @@ class LogisticRegression(object):
         lower = y_pred - LogisticRegression.logistic(mid - nstddevs * delta)
         return lower, upper
     
-    def estimate_errors_sampling(self, X, n_samples=10000, return_covariance=False):
+    def prediction_errors_from_sampling(self, X, n_samples=10000, return_covariance=False):
         """
         Estimate uncertainties via sampling the posterior
 
@@ -341,7 +341,7 @@ class LogisticRegression(object):
             symmetric_error = np.sqrt(np.abs(var))
             return symmetric_error
 
-    def estimate_errors_linear(self, X, n_stddevs=1, return_covariance=False):
+    def prediction_errors_from_linear_error_propagation(self, X, n_stddevs=1, return_covariance=False):
         """
         Estimate uncertainties via linear error propagation
         
