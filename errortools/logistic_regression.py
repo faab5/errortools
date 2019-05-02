@@ -273,18 +273,31 @@ class LogisticRegression(object):
         y_pred = LogisticRegression.logistic(X.dot(self.parameters))
         return y_pred
 
-    def prediction_errors(self, X, method="from_interval", *args, **kwargs):
+    def prediction_errors(self, X, method="interval", **kwargs):
         """
+        Estimate asymmetric errors on predictions
 
         :param X:
-        "param method:
-        :param args:
-        :param kwargs:
-        :return:
+        :param method: [str] method to use
+            One out of interval (default), asmpling, or linear_error_propagation
+            See methods for details
+        :param kwargs: keyword arguments passed onto method
+            Possibilities are n_samples, and n_stddevs
+            Defaults apply if empty
+        :return: [(numpy 1D array, numpy 1D array,)] lower and upper error estimates
         """
-        pass
-      
-    def prediction_errors_from_interval(self, X, nstddevs=1):
+        if method == "sampling":
+            kwargs =  {key: kwargs[key] for key in ('n_samples',) if key in kwargs.keys()}
+            lower = upper = self.prediction_errors_from_sampling(X, return_covariance=False, **kwargs)
+        elif method == "linear_error_propagation" or method == "linear":
+            kwargs =  {key: kwargs[key] for key in ('n_stddevs',) if key in kwargs.keys()}
+            lower = upper = self.prediction_errors_from_linear_error_propagation(X, return_covariance=False, **kwargs)
+        else:
+            kwargs = {key: kwargs[key] for key in ('n_stddevs',) if key in kwargs.keys()}
+            lower, upper =  self.prediction_errors_from_interval(X, **kwargs)
+        return lower, upper
+
+    def prediction_errors_from_interval(self, X, n_stddevs=1):
         """
         Estimate upper and lower uncertainties
 
@@ -296,14 +309,14 @@ class LogisticRegression(object):
         taking parameters within this interval
         :param X: [numpy 2D array] feature matrix
         :param nstddevs: [int] error contour
-        :return: [numpy 1D arrays] upper and lower error estimates
+        :return: [numpy 1D arrays] lower and upper error estimates
         """
         X, _ = self._check_inputs(X, None)
         mid = X.dot(self.parameters)
         delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
         y_pred = LogisticRegression.logistic(mid)
-        upper = LogisticRegression.logistic(mid + nstddevs * delta) - y_pred
-        lower = y_pred - LogisticRegression.logistic(mid - nstddevs * delta)
+        upper = LogisticRegression.logistic(mid + n_stddevs * delta) - y_pred
+        lower = y_pred - LogisticRegression.logistic(mid - n_stddevs * delta)
         return lower, upper
     
     def prediction_errors_from_sampling(self, X, n_samples=10000, return_covariance=False):

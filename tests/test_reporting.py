@@ -40,7 +40,7 @@ def test_report_parameter_error(amodel):
 
 def test_report_loss_versus_approximation(amodel):
     with PdfPages('Report.pdf') as pdf:
-        errortools.report_loss_versus_approximation(amodel, X, y, 0, 0, features, pdf)
+        errortools.report_loss_versus_approximation(amodel, X, y, features, pdf)
 
     assert os.path.isfile('Report.pdf') == True
     assert os.path.isfile('Reports.pdf') == False
