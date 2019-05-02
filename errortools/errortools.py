@@ -124,7 +124,8 @@ def report_loss_versus_approximation(model, X, y, l1, l2, features, pdf=None, pd
     return pdf
 
 
-def report_parameter_error(model, features,  pdf=None, pdf_name = "report.pdf"):
+def report_parameter_error(model, features, pdf=None, pdf_name = "report.pdf",
+                           figsize=(8, 4), rotation_x_labels = 20):
     """
     Create a PDF report showing the estimated error per parameter. 
 
@@ -132,19 +133,21 @@ def report_parameter_error(model, features,  pdf=None, pdf_name = "report.pdf"):
     :param pdf: PDF pages object
     :param features: list of input feature names
     :param pdf_name: name of the PDF document
+    :param figsize: size of the figure (tuple)
+    :param rotation_x_labels: rotation of the labels on the x-axis (degrees or keyword)
     """
     
     # TODO scale figure as such that it has the same shape as previous pages
     # TODO check that the model provided is a fitted model
 
-    fig, ax = plt.subplots(1, 1, figsize=(8,4))
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
     
     ax.errorbar(x=np.arange(model.parameters.shape[0]), y=model.parameters, 
                 yerr=np.sqrt(np.diag(model.cvr_mtx)), fmt='o', color='red',  alpha=0.6, markersize=10, 
                 barsabove=True, capsize=10, label='fitted parameter value')
     ax.grid()
     ax.xaxis.set_ticks(np.arange(model.parameters.shape[0]))
-    ax.xaxis.set_ticklabels(features + ['bias'])
+    ax.xaxis.set_ticklabels(features + ['bias'], rotation=rotation_x_labels)
     ax.set_xlabel("Parameters")
     ax.set_ylabel("Fitted parameter value")
     
@@ -256,7 +259,7 @@ def get_positive_ratio(model, X, y, n_samples=1000, bins=20):
     
     return ratio, err, bin_edges
 
-def report_model_positive_ratio(model, X, y, n_samples, bins, pdf=None, pdf_name='report.pdf'):
+def report_model_positive_ratio(model, X, y, n_samples, bins, pdf=None, pdf_name='report.pdf', figsize=(8,4)):
     """
     Create a PDF report showing the model's positive ratio verus the model score. 
 
@@ -267,8 +270,9 @@ def report_model_positive_ratio(model, X, y, n_samples, bins, pdf=None, pdf_name
     :param bins: number of bins to distribute the model scores over
     :param pdf: PDF pages object
     :param pdf_name: name of the PDF document
+    :param figsize: size of the figure (tuple)
     """ 
-    fig, ax = plt.subplots(1, 1, figsize=(8,4))
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
 
     ratio, err, e = get_positive_ratio(model, X, y, n_samples, bins)
 
@@ -286,7 +290,7 @@ def report_model_positive_ratio(model, X, y, n_samples, bins, pdf=None, pdf_name
     
     return pdf
 
-def report_error_test_samples(model, X, pdf=None, pdf_name='report.pdf'):
+def report_error_test_samples(model, X, pdf=None, pdf_name='report.pdf', figsize=(8, 4)):
     """
     Create a PDF report showing the estimated error on the provided test samples.
     These are ordered by the prediction score.
@@ -295,8 +299,9 @@ def report_error_test_samples(model, X, pdf=None, pdf_name='report.pdf'):
     :param X: [numpy.ndarray shape (n_data, n_features)] input features
     :param pdf: PDF pages object
     :param pdf_name: name of the PDF document
+    :param figsize: size of the figure (tuple)
     """ 
-    fig, ax = plt.subplots(1, 1, figsize=(8,4))
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
     x = np.linspace(0, len(X), len(X))
 
     y_pred = model.predict(X)
