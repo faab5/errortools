@@ -36,7 +36,7 @@ class LogisticRegression(object):
         # training data
         self.X = None
         self.y = None
-        
+
     @property
     def parameters(self):
         """
@@ -54,7 +54,7 @@ class LogisticRegression(object):
         """
         if self.minuit is None:
             raise RuntimeError("Fit before access to fit parameters")
-        return np.sqrt(np.diag(self.minuit.np_matrix()))
+        return np.sqrt(np.diag(self.minuit.np_covariance()))
 
     @property
     def cvr_mtx(self):
@@ -63,7 +63,7 @@ class LogisticRegression(object):
         """
         if self.minuit is None:
             raise RuntimeError("Fit before access to fit parameters")
-        return self.minuit.np_matrix()
+        return self.minuit.np_covariance()
 
     def negative_log_posterior(self, p, X, y):
         """
@@ -134,8 +134,10 @@ class LogisticRegression(object):
 
     def fit(self, X, y,
             initial_parameters=None, initial_step_sizes=None,
-            parameter_limits=None, parameter_fixes=None,
-            print_level=0, fit_intercept=None,
+            parameter_limits=None,
+            #parameter_fixes=None,
+            print_level=0,
+            #fit_intercept=None,
             max_function_calls=10000, n_splits=1):
         """
         Fit logistic regression to feature matrix X and target vector y
