@@ -86,8 +86,9 @@ def report_loss_versus_approximation(model, X, y, features, pdf=None, pdf_name =
     # TODO scale figure as such that it has the same shape as previous pages
     # TODO check that the model provided is a fitted model
 
-    X_bias = np.concatenate((X, np.ones((X.shape[0], 1))), axis=1)
-    f0 = model.negative_log_posterior(model.parameters, X_bias, y)
+    #X_bias = np.concatenate((X, np.ones((X.shape[0], 1))), axis=1)
+    #f0 = model.negative_log_posterior(model.parameters, X_bias, y)
+    f0 = model.negative_log_posterior(model.parameters, X, y)
     
     if pdf == None:
         pdf = PdfPages(pdf_name)
@@ -104,7 +105,8 @@ def report_loss_versus_approximation(model, X, y, features, pdf=None, pdf_name =
 
         for w in weights:
             params[p] = w
-            loss.append(model.negative_log_posterior(params, X_bias, y))
+            #loss.append(model.negative_log_posterior(params, X_bias, y))
+            loss.append(model.negative_log_posterior(params, X, y))
             parabolic_approx = params - model.parameters
 
             approx.append(f0 + 0.5 * np.array([np.dot(parabolic_approx, np.dot(scipy.linalg.inv(model.cvr_mtx),

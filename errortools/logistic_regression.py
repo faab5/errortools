@@ -18,6 +18,11 @@ class LogisticRegression(object):
     :param minuit: instance of the Minuit minimization class
     :param X: input features for fitting
     :param y: targets for fitting
+
+    ToDo:
+        Remove fit_intercept
+        Add fit_intercept to fit
+        Remove assertions
     """
     def __init__(self, fit_intercept=True, l1=0, l2=0):
         """
@@ -79,8 +84,11 @@ class LogisticRegression(object):
         :param y: [numpy 1D array] target vector
         :return: negative log posterior of parameters given data
         """
+
+        assert p.shape[0] == X.shape[1] + 1
+
         # predictions on train set with given parameters
-        y_pred = scipy.stats.logistic.cdf(X.dot(p))
+        y_pred = scipy.stats.logistic.cdf(X.dot(p[:-1]) + p[-1])
 
         # negative log-likelihood of predictions
         nll = -np.sum(y*np.log(y_pred+1e-16) + (1-y)*np.log(1-y_pred+1e-16))
@@ -108,11 +116,16 @@ class LogisticRegression(object):
         :return: gradient with respect to the parameters of the negative
             log posterior
         """
+
+        assert p.shape[0] == X.shape[1] + 1
+
         # predictions on train set with given parameters
-        y_pred = scipy.stats.logistic.cdf(X.dot(p))
+        y_pred = scipy.stats.logistic.cdf(X.dot(p[:-1]) + p[-1])
 
         # gradient negative log-likelihood
-        gnll = np.sum((y_pred-y)[:,np.newaxis] * X, axis=0)
+        gnll = np.empty_like(p)
+        gnll[:-1] = np.sum((y_pred-y)[:,np.newaxis] * X, axis=0)
+        gnll[-1] = np.sum(y_pred-y)
 
         if self.l1 == 0 and self.l2 == 0:
             return gnll
@@ -160,26 +173,25 @@ class LogisticRegression(object):
         """
         self.X, self.y = self._check_inputs(X, y)
 
+        assert self.minuit is None or self.X.shape[1] + 1 == self.parameters.shape[0]
+
         if self.minuit is None or\
             initial_parameters is not None or\
             initial_step_sizes is not None or\
             parameter_limits is not None or\
             parameter_fixes is not None:
 
-            n_dim = self.X.shape[1]
+            n_dim = self.X.shape[1] + 1
 
             if initial_parameters is None:
                 if self.minuit is not None:
                     initial_parameters = self.parameters
                 else:
-                    # initial_parameters = [0]*self.X.shape[1]
                     initial_parameters = np.zeros(n_dim, dtype=float)
             elif isinstance(initial_parameters, (float, int,)):
-                #initial_parameters = [initial_parameters]*self.X.shape[1]
                 initial_parameters = np.full(n_dim, initial_parameters, dtype=float)
             elif hasattr(initial_parameters, "__iter__"):
                 initial_parameters = np.array(initial_parameters, dtype=float)
-                #if initial_parameters.shape[0] != self.X.shape[1]:
                 if initial_parameters.shape[0] != n_dim:
                     raise ValueError("Dimensions of initial parameters don't match known dimensions")
             else:
@@ -187,7 +199,6 @@ class LogisticRegression(object):
 
             if initial_step_sizes is not None:
                 if isinstance(initial_step_sizes, (float, int,)):
-                    #initial_step_sizes = [initial_step_sizes]*len(initial_parameters)
                     initial_step_sizes = np.full(n_dim, initial_step_sizes, dtype=float)
                 elif not hasattr(initial_step_sizes, "__iter__") or isinstance(initial_step_sizes, str):
                     raise ValueError("Step sizes should be a sequence of numbers")
@@ -209,7 +220,6 @@ class LogisticRegression(object):
                         (l[0] is None or isinstance(l[0],(int,float,))) and\
                         (l[1] is None or isinstance(l[1],(int,float,)))) for l in parameter_limits]):
                     raise ValueError("A limit should be a range tuple or None")
-                #if len(parameter_limits) != len(initial_parameters):
                 if len(parameter_limits) != n_dim:
                     raise ValueError("{:d} limits given for {:d} parameters".format(len(parameter_limits), n_dim))
             elif self.minuit is not None:
@@ -222,7 +232,6 @@ class LogisticRegression(object):
                     raise ValueError("Fixes should be a sequence of booleans")
                 if not all([isinstance(f, (bool, int, float,)) for f in parameter_fixes]):
                     raise ValueError("A fix should be True or False")
-                #if len(parameter_fixes) != len(initial_parameters):
                 if len(parameter_fixes) != n_dim:
                     raise ValueError("{:d} fixes given for {:d} parameters".format(len(parameter_fixes), n_dim))
                 parameter_fixes = [bool(f) for f in parameter_fixes]
@@ -268,7 +277,8 @@ class LogisticRegression(object):
         :return: [numpy 1D array] logistic regression scores
         """
         X, _ = self._check_inputs(X, None)
-        y_pred = scipy.stats.logistic.cdf(X.dot(self.parameters))
+        p = self.parameters
+        y_pred = scipy.stats.logistic.cdf(X.dot(p[:-1]) + p[-1])
         return y_pred
 
     def prediction_errors(self, X, method="interval", **kwargs):
@@ -317,8 +327,12 @@ class LogisticRegression(object):
         :return: [numpy 1D arrays] lower and upper error estimates
         """
         X, _ = self._check_inputs(X, None)
-        mid = X.dot(self.parameters)
-        delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
+        X_biased = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
+        p = self.parameters
+        #mid = X.dot(p)
+        mid = X_biased.dot(p)
+        #delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
+        delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X_biased], dtype=float)
         y_pred = scipy.stats.logistic.cdf(mid)
         upper = scipy.stats.logistic.cdf(mid + n_stddevs * delta) - y_pred
         lower = y_pred - scipy.stats.logistic.cdf(mid - n_stddevs * delta)
@@ -344,11 +358,17 @@ class LogisticRegression(object):
         if not isinstance(n_samples, (int,)):
             raise ValueError("Non-integer number of samples provided")
 
-        sampled_parameters = np.random.multivariate_normal(self.parameters, self.cvr_mtx, n_samples).T # shape (npars, nsamples,)
-        fitted_parameters = np.tile(self.parameters, (n_samples, 1)).T # shape (npars, nsamples,)
+        X_biased = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
 
-        sigmoid_sampled_parameters = scipy.stats.logistic.cdf(X.dot(sampled_parameters)) # shape (ndata, nsamples,)
-        sigmoid_fitted_parameters = scipy.stats.logistic.cdf(X.dot(fitted_parameters)) # shape (ndata, nsamples,)
+        p = self.parameters
+
+        sampled_parameters = np.random.multivariate_normal(p, self.cvr_mtx, n_samples).T # shape (npars, nsamples,)
+        fitted_parameters = np.tile(p, (n_samples, 1)).T # shape (npars, nsamples,)
+
+        #sigmoid_sampled_parameters = scipy.stats.logistic.cdf(X.dot(sampled_parameters)) # shape (ndata, nsamples,)
+        sigmoid_sampled_parameters = scipy.stats.logistic.cdf(X_biased.dot(sampled_parameters)) # shape (ndata, nsamples,)
+        #sigmoid_fitted_parameters = scipy.stats.logistic.cdf(X.dot(fitted_parameters)) # shape (ndata, nsamples,)
+        sigmoid_fitted_parameters = scipy.stats.logistic.cdf(X_biased.dot(fitted_parameters)) # shape (ndata, nsamples,)
         sigmoid_variation = sigmoid_sampled_parameters - sigmoid_fitted_parameters  # shape (ndata, nsamples,)
 
         if return_covariance == True:
@@ -375,13 +395,18 @@ class LogisticRegression(object):
         """
         X, _ = self._check_inputs(X, None)
 
-        fcn = lambda p: scipy.stats.logistic.cdf(X.dot(p))
+        X_biased = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
+
+        #fcn = lambda p: scipy.stats.logistic.cdf(X.dot(p))
+        fcn = lambda p: scipy.stats.logistic.cdf(X_biased.dot(p))
+
+        p = self.parameters
 
         if isinstance(n_stddevs, (float, int,)):
-            gradients = np.array([(fcn(self.parameters + n_stddevs*u) - fcn(self.parameters - n_stddevs*u)) \
+            gradients = np.array([(fcn(p + n_stddevs*u) - fcn(p - n_stddevs*u)) \
                                   /(2 * np.sum(n_stddevs*u)) for u in np.diag(np.sqrt(np.diag(self.cvr_mtx)))]).T
         else:
-            gradients = X * (fcn(self.parameters) * (1 - fcn(self.parameters)))[:, np.newaxis] # shape (ndata, npars,)
+            gradients = X * (fcn(p) * (1 - fcn(p)))[:, np.newaxis] # shape (ndata, npars,)
 
         if return_covariance == True:
             covar = np.dot(gradients, np.dot(self.cvr_mtx, gradients.T))  # shape (ndata, ndata,)
@@ -408,15 +433,17 @@ class LogisticRegression(object):
         if self.minuit is not None:
             p = self.minuit.np_values()
 
-            if X.shape[1] + int(self.fit_intercept) == p.shape[0]:
+            #if X.shape[1] + int(self.fit_intercept) == p.shape[0]:
+            if X.shape[1] + 1 == p.shape[0]:
                 pass
-            elif X.shape[1] == 1 and X.shape[0] + int(self.fit_intercept) == p.shape[0]:
+            #elif X.shape[1] == 1 and X.shape[0] + int(self.fit_intercept) == p.shape[0]:
+            elif X.shape[1] == 1 and X.shape[0] + 1 == p.shape[0]:
                 X = X.T
             else:
                 raise ValueError("Dimension of X do not match dimensions of parameters")
 
-        if self.fit_intercept:
-            X = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
+        #if self.fit_intercept:
+        #    X = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
 
         if y is not None:
             y = (np.atleast_1d(y) != 0).astype(int)
