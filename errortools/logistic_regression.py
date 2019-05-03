@@ -14,8 +14,6 @@ class LogisticRegression(object):
     Attributes:
     :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
     :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
-    :param X: input features used to fit on
-    :param y: targets used to fit on
 
     ToDo:
         Remove assertions
@@ -34,8 +32,27 @@ class LogisticRegression(object):
         self.minuit  = None
 
         # training data
-        self.X = None
-        self.y = None
+        self._X = None
+        self._y = None
+
+    @property
+    def X(self):
+        """
+        Training input features
+        """
+        if self._X is None:
+            raise RuntimeError("Fit before access to fit data")
+        return self._X
+
+    @property
+    def y(self):
+        """
+        Training output targets
+        """
+        if self._y is None:
+            raise RuntimeError("Fit before access to fit data")
+        return self._y
+
 
     @property
     def parameters(self):
@@ -184,9 +201,9 @@ class LogisticRegression(object):
         :param n_splits: [integer] split fit in to n_splits runs. Fitting stops when it found the function
             minimum to be valid or n_calls is reached
         """
-        self.X, self.y = self._check_inputs(X, y)
+        self._X, self._y = self._check_inputs(X, y)
 
-        assert self.minuit is None or self.X.shape[1] + 1 == self.parameters.shape[0]
+        assert self.minuit is None or self._X.shape[1] + 1 == self.parameters.shape[0]
 
         if self.minuit is None or\
             initial_parameters is not None or\
@@ -194,7 +211,7 @@ class LogisticRegression(object):
             parameter_limits is not None or\
             parameter_fixes is not None:
 
-            n_dim = self.X.shape[1] + 1
+            n_dim = self._X.shape[1] + 1
 
             if initial_parameters is None:
                 if self.minuit is not None:
@@ -255,10 +272,10 @@ class LogisticRegression(object):
                 parameter_fixes[-1] = (not fit_intercept)
 
             # define function to be minimized
-            fcn = lambda p: self.negative_log_posterior(p, self.X, self.y)
+            fcn = lambda p: self.negative_log_posterior(p, self._X, self._y)
 
             # define the gradient of the function to be minimized
-            grd = lambda p: self.gradient_negative_log_posterior(p, self.X, self.y)
+            grd = lambda p: self.gradient_negative_log_posterior(p, self._X, self._y)
 
             # initiate minuit minimizer
             self.minuit = iminuit.Minuit.from_array_func(fcn=fcn,
