@@ -65,6 +65,22 @@ class LogisticRegression(object):
             raise RuntimeError("Fit before access to fit parameters")
         return self.minuit.np_covariance()
 
+    @property
+    def hessian_mtx(self):
+        """
+        Covariance matrix of the negative log-likelihood around the minimum
+        I.e. the inverse of the covariance matrix
+        """
+        if self.minuit is None:
+            raise RuntimeError("Fit before access to fit parameters")
+        cvr_mtx =  self.minuit.np_covariance()
+        fixed = np.array(self.minuit.fixed.values())
+        assert np.sum(np.abs([cvr_mtx[i,j] for i in range(cvr_mtx.shape[0]) for j in range(cvr_mtx.shape[1]) if fixed[i] or fixed[j]])) == 0
+        cvr_mtx[fixed, fixed] = 1
+        h = scipy.linalg.inv(cvr_mtx)
+        h[fixed, fixed] = 0
+        return h
+
     def negative_log_posterior(self, p, X, y):
         """
         Calculate the negative of the log of the posterior
@@ -135,9 +151,9 @@ class LogisticRegression(object):
     def fit(self, X, y,
             initial_parameters=None, initial_step_sizes=None,
             parameter_limits=None,
-            #parameter_fixes=None,
+            parameter_fixes=None,
             print_level=0,
-            #fit_intercept=None,
+            fit_intercept=None,
             max_function_calls=10000, n_splits=1):
         """
         Fit logistic regression to feature matrix X and target vector y
@@ -236,7 +252,7 @@ class LogisticRegression(object):
                 parameter_fixes = [state['is_fixed'] for state in self.minuit.get_param_states()]
 
             if fit_intercept in (True, False):
-                parameter_fixes[-1] = fit_intercept
+                parameter_fixes[-1] = (not fit_intercept)
 
             # define function to be minimized
             fcn = lambda p: self.negative_log_posterior(p, self.X, self.y)
