@@ -12,27 +12,21 @@ class LogisticRegression(object):
     - errors:       dwn, up = m.prediction_errors(X)
 
     Attributes:
-    :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
     :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
     :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
-    :param minuit: instance of the Minuit minimization class
-    :param X: input features for fitting
-    :param y: targets for fitting
+    :param X: input features used to fit on
+    :param y: targets used to fit on
 
     ToDo:
-        Remove fit_intercept
-        Add fit_intercept to fit
         Remove assertions
     """
-    def __init__(self, fit_intercept=True, l1=0, l2=0):
+    def __init__(self, l1=0, l2=0):
         """
         Instantiate a logistic regression
-        :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
         :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
         :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
         """
         # pre-fit attributes
-        self.fit_intercept = fit_intercept
         self.l1 = l1
         self.l2 = l2
 
@@ -141,7 +135,7 @@ class LogisticRegression(object):
     def fit(self, X, y,
             initial_parameters=None, initial_step_sizes=None,
             parameter_limits=None, parameter_fixes=None,
-            print_level=0,
+            print_level=0, fit_intercept=None,
             max_function_calls=10000, n_splits=1):
         """
         Fit logistic regression to feature matrix X and target vector y
@@ -167,6 +161,7 @@ class LogisticRegression(object):
             initial value
             Use False not to fix any parameters and None to take the fixes from the previous fit
         :param print_level: 0 is quiet. 1 print out fit results. 2 paranoid. 3 really paranoid
+        :param fit_intercept: If given, overrides the last element of parameter_fixes
         :param max_function_calls: [integer] maximum number of function calls
         :param n_splits: [integer] split fit in to n_splits runs. Fitting stops when it found the function
             minimum to be valid or n_calls is reached
@@ -237,6 +232,9 @@ class LogisticRegression(object):
                 parameter_fixes = [bool(f) for f in parameter_fixes]
             elif self.minuit is not None:
                 parameter_fixes = [state['is_fixed'] for state in self.minuit.get_param_states()]
+
+            if fit_intercept in (True, False):
+                parameter_fixes[-1] = fit_intercept
 
             # define function to be minimized
             fcn = lambda p: self.negative_log_posterior(p, self.X, self.y)
@@ -329,9 +327,7 @@ class LogisticRegression(object):
         X, _ = self._check_inputs(X, None)
         X_biased = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
         p = self.parameters
-        #mid = X.dot(p)
         mid = X_biased.dot(p)
-        #delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
         delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X_biased], dtype=float)
         y_pred = scipy.stats.logistic.cdf(mid)
         upper = scipy.stats.logistic.cdf(mid + n_stddevs * delta) - y_pred
@@ -365,9 +361,7 @@ class LogisticRegression(object):
         sampled_parameters = np.random.multivariate_normal(p, self.cvr_mtx, n_samples).T # shape (npars, nsamples,)
         fitted_parameters = np.tile(p, (n_samples, 1)).T # shape (npars, nsamples,)
 
-        #sigmoid_sampled_parameters = scipy.stats.logistic.cdf(X.dot(sampled_parameters)) # shape (ndata, nsamples,)
         sigmoid_sampled_parameters = scipy.stats.logistic.cdf(X_biased.dot(sampled_parameters)) # shape (ndata, nsamples,)
-        #sigmoid_fitted_parameters = scipy.stats.logistic.cdf(X.dot(fitted_parameters)) # shape (ndata, nsamples,)
         sigmoid_fitted_parameters = scipy.stats.logistic.cdf(X_biased.dot(fitted_parameters)) # shape (ndata, nsamples,)
         sigmoid_variation = sigmoid_sampled_parameters - sigmoid_fitted_parameters  # shape (ndata, nsamples,)
 
@@ -397,7 +391,6 @@ class LogisticRegression(object):
 
         X_biased = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
 
-        #fcn = lambda p: scipy.stats.logistic.cdf(X.dot(p))
         fcn = lambda p: scipy.stats.logistic.cdf(X_biased.dot(p))
 
         p = self.parameters
@@ -433,17 +426,12 @@ class LogisticRegression(object):
         if self.minuit is not None:
             p = self.minuit.np_values()
 
-            #if X.shape[1] + int(self.fit_intercept) == p.shape[0]:
             if X.shape[1] + 1 == p.shape[0]:
                 pass
-            #elif X.shape[1] == 1 and X.shape[0] + int(self.fit_intercept) == p.shape[0]:
             elif X.shape[1] == 1 and X.shape[0] + 1 == p.shape[0]:
                 X = X.T
             else:
                 raise ValueError("Dimension of X do not match dimensions of parameters")
-
-        #if self.fit_intercept:
-        #    X = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
 
         if y is not None:
             y = (np.atleast_1d(y) != 0).astype(int)
