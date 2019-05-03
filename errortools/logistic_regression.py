@@ -166,29 +166,35 @@ class LogisticRegression(object):
             parameter_limits is not None or\
             parameter_fixes is not None:
 
+            n_dim = self.X.shape[1]
+
             if initial_parameters is None:
                 if self.minuit is not None:
                     initial_parameters = self.parameters
                 else:
-                    initial_parameters = [0]*self.X.shape[1]
+                    # initial_parameters = [0]*self.X.shape[1]
+                    initial_parameters = np.zeros(n_dim, dtype=float)
             elif isinstance(initial_parameters, (float, int,)):
-                initial_parameters = [initial_parameters]*self.X.shape[1]
+                #initial_parameters = [initial_parameters]*self.X.shape[1]
+                initial_parameters = np.full(n_dim, initial_parameters, dtype=float)
             elif hasattr(initial_parameters, "__iter__"):
                 initial_parameters = np.array(initial_parameters, dtype=float)
-                if initial_parameters.shape[0] != self.X.shape[1]:
-                    raise ValueError("Dimensions of features X and initial parameters don't match")
+                #if initial_parameters.shape[0] != self.X.shape[1]:
+                if initial_parameters.shape[0] != n_dim:
+                    raise ValueError("Dimensions of initial parameters don't match known dimensions")
             else:
                 raise ValueError("Initial parameters not understood")
 
             if initial_step_sizes is not None:
                 if isinstance(initial_step_sizes, (float, int,)):
-                    initial_step_sizes = [initial_step_sizes]*len(initial_parameters)
+                    #initial_step_sizes = [initial_step_sizes]*len(initial_parameters)
+                    initial_step_sizes = np.full(n_dim, initial_step_sizes, dtype=float)
                 elif not hasattr(initial_step_sizes, "__iter__") or isinstance(initial_step_sizes, str):
                     raise ValueError("Step sizes should be a sequence of numbers")
                 elif not all([isinstance(s, (float, int,)) for s in initial_step_sizes]):
                     raise ValueError("Step sizes should be a sequence of numbers")
-                elif len(initial_step_sizes) != len(initial_parameters):
-                    raise ValueError("{:d} step sizes given for {:d} parameters".format(len(initial_step_sizes), len(initial_parameters)))
+                elif len(initial_step_sizes) != n_dim:
+                    raise ValueError("{:d} step sizes given for {:d} parameters".format(len(initial_step_sizes), n_dim))
             elif self.minuit is not None:
                 initial_step_sizes = [state['error'] for state in self.minuit.get_param_states()]
             else:
@@ -197,26 +203,28 @@ class LogisticRegression(object):
             if parameter_limits == False:
                 parameter_limits = None
             elif parameter_limits is not None:
-                if not hasattr(parameter_limits, "__iter__") or isinstance(initial_step_sizes, str):
+                if not hasattr(parameter_limits, "__iter__") or isinstance(parameter_limits, str):
                     raise ValueError("Limits should be a sequence of range tuples")
                 if not all([l is None or (isinstance(l,(tuple,)) and len(l)==2 and\
                         (l[0] is None or isinstance(l[0],(int,float,))) and\
                         (l[1] is None or isinstance(l[1],(int,float,)))) for l in parameter_limits]):
                     raise ValueError("A limit should be a range tuple or None")
-                if len(parameter_limits) != len(initial_parameters):
-                    raise ValueError("{:d} limits given for {:d} parameters".format(len(parameter_limits), len(initial_parameters)))
+                #if len(parameter_limits) != len(initial_parameters):
+                if len(parameter_limits) != n_dim:
+                    raise ValueError("{:d} limits given for {:d} parameters".format(len(parameter_limits), n_dim))
             elif self.minuit is not None:
                 parameter_limits = [(state['lower_limit'], state['upper_limit'],) for state in self.minuit.get_param_states()]
 
             if parameter_fixes == False:
                 parameter_fixes = None
             elif parameter_fixes is not None:
-                if not hasattr(parameter_fixes, "__iter__") or isinstance(initial_step_sizes, str):
+                if not hasattr(parameter_fixes, "__iter__") or isinstance(parameter_fixes, str):
                     raise ValueError("Fixes should be a sequence of booleans")
                 if not all([isinstance(f, (bool, int, float,)) for f in parameter_fixes]):
                     raise ValueError("A fix should be True or False")
-                if len(parameter_fixes) != len(initial_parameters):
-                    raise ValueError("{:d} fixes given for {:d} parameters".format(len(parameter_fixes), len(initial_parameters)))
+                #if len(parameter_fixes) != len(initial_parameters):
+                if len(parameter_fixes) != n_dim:
+                    raise ValueError("{:d} fixes given for {:d} parameters".format(len(parameter_fixes), n_dim))
                 parameter_fixes = [bool(f) for f in parameter_fixes]
             elif self.minuit is not None:
                 parameter_fixes = [state['is_fixed'] for state in self.minuit.get_param_states()]
