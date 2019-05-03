@@ -198,7 +198,8 @@ def expand(point, idx, rnge):
     x[:, idx] = rnge
     return x
 
-def report_error_indivial_pred(model, sample, param, features, x_min, x_max, stepsize, pdf=None, pdf_name='report.pdf'):
+def report_error_indivial_pred(model, sample, param, features, x_min, x_max, 
+                               stepsize, pdf=None, pdf_name='report.pdf', figsize=(8,4)):
     """
     Create a PDF report showing the estimated error for an individual data sample by varying one dimension of the parameters. 
 
@@ -214,7 +215,7 @@ def report_error_indivial_pred(model, sample, param, features, x_min, x_max, ste
     """
     # TODO check that the model provided is a fitted model
 
-    fig, ax = plt.subplots(1, 1, figsize=(8,4))
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
     param_index = features.index(param)
 
     x = np.linspace(x_min, x_max, stepsize)
