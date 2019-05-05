@@ -450,7 +450,7 @@ class LogisticRegression(object):
         Determine statistics and uncertainties on a test set
 
         Calculates the confusion matrix, true and false positive rates,
-        area under the receiver operator curve, and there uncertainties
+        area under the receiver operator curve, and their uncertainties
         on a test set by sampling parameters from an approximate posterior
         (a multivariate normal distribution)
         Does not (yet) account for uncertainties due to the test set itself
@@ -500,29 +500,33 @@ class LogisticRegression(object):
         nfn = npos - ntp
         ntn = np.sum((y_pred[:,idx_neg] <= threshold).astype(int), axis=1)
         nfp = nneg - ntn
-        ntp_err = np.sqrt(np.mean((ntp-ntp0)**2))
-        nfn_err = np.sqrt(np.mean((nfn-nfn0)**2))
-        ntn_err = np.sqrt(np.mean((ntn-ntn0)**2))
-        nfp_err = np.sqrt(np.mean((nfp-nfp0)**2))
-        cm_cvr_mtx = np.ones((4,4), dtype=float)
+        cm_cvr_mtx = np.empty((4,4), dtype=float)
+        cm_cvr_mtx[0,0] = np.mean((ntp-ntp0)**2)
         cm_cvr_mtx[0,1] = cm_cvr_mtx[1,0] = np.mean((ntp-ntp0)*(nfn-nfn0))
         cm_cvr_mtx[0,2] = cm_cvr_mtx[2,0] = np.mean((ntp-ntp0)*(ntn-ntn0))
         cm_cvr_mtx[0,3] = cm_cvr_mtx[3,0] = np.mean((ntp-ntp0)*(nfp-nfp0))
+        cm_cvr_mtx[1,1] = np.mean((nfn-nfn0)**2)
         cm_cvr_mtx[1,2] = cm_cvr_mtx[2,1] = np.mean((nfn-nfn0)*(ntn-ntn0))
         cm_cvr_mtx[1,3] = cm_cvr_mtx[3,1] = np.mean((nfn-nfn0)*(nfp-nfp0))
+        cm_cvr_mtx[2,2] = np.mean((ntn-ntn0)**2)
         cm_cvr_mtx[2,3] = cm_cvr_mtx[3,2] = np.mean((ntn-ntn0)*(nfp-nfp0))
-        d_out['confusion matrix'] = {'true positives': {'value': ntp, 'error': ntp_err},
-                                     'false negatives': {'value': nfn, 'error': nfn_err},
-                                     'true negatives': {'value': ntn, 'error': ntn_err},
-                                     'false positives': {'value': nfp, 'error': nfp_err},
+        cm_cvr_mtx[3,3] = np.mean((nfp-nfp0)**2)
+        ntp_err = np.sqrt(cm_cvr_mtx[0,0])
+        nfn_err = np.sqrt(cm_cvr_mtx[1,1])
+        ntn_err = np.sqrt(cm_cvr_mtx[2,2])
+        nfp_err = np.sqrt(cm_cvr_mtx[3,3])
+        d_out['confusion matrix'] = {'true positives': {'value': ntp0, 'error': ntp_err},
+                                     'false negatives': {'value': nfn0, 'error': nfn_err},
+                                     'true negatives': {'value': ntn0, 'error': ntn_err},
+                                     'false positives': {'value': nfp0, 'error': nfp_err},
                                      'covariance matrix': cm_cvr_mtx}
         tpr = ntp/float(npos)
         tnr = ntn/float(nneg)
         tpr_err = np.sqrt(np.mean((tpr-tpr0)**2))
         tnr_err = np.sqrt(np.mean((tnr-tnr0)**2))
         rates_cvr = np.mean((tpr-tpr0)*(tnr-tnr0))
-        d_out['prediction rates'] = {'true positive rate': {'value': tpr, 'error': tpr_err},
-                          'true negative rate': {'value': tnr, 'error': tnr_err},
+        d_out['prediction rates'] = {'true positive rate': {'value': tpr0, 'error': tpr_err},
+                          'true negative rate': {'value': tnr0, 'error': tnr_err},
                           'covariance': rates_cvr}
 
         return d_out
