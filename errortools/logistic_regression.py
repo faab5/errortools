@@ -1,6 +1,7 @@
 import numpy as np
 import iminuit
 import scipy.stats
+import sklearn.metrics
 
 class LogisticRegression(object):
     """
@@ -92,6 +93,7 @@ class LogisticRegression(object):
             raise RuntimeError("Fit before access to fit parameters")
         cvr_mtx =  self.minuit.np_covariance()
         fixed = np.array(self.minuit.fixed.values())
+        # fixed parameter row and columns should only contain zeros
         assert np.sum(np.abs([cvr_mtx[i,j] for i in range(cvr_mtx.shape[0]) for j in range(cvr_mtx.shape[1]) if fixed[i] or fixed[j]])) == 0
         cvr_mtx[fixed, fixed] = 1
         h = scipy.linalg.inv(cvr_mtx)
@@ -442,6 +444,88 @@ class LogisticRegression(object):
         else:
             symmetric_error = np.sqrt(np.abs([np.dot(g, np.dot(self.cvr_mtx, g)) for g in gradients]))
             return symmetric_error
+
+    def test(self, X, y, threshold=0.5, n_samples=10000):
+        """
+        Determine statistics and uncertainties on a test set
+
+        Calculates the confusion matrix, true and false positive rates,
+        area under the receiver operator curve, and there uncertainties
+        on a test set by sampling parameters from an approximate posterior
+        (a multivariate normal distribution)
+        Does not (yet) account for uncertainties due to the test set itself
+
+        :param X: [numpy 2D array shape (n_data, n_features,)] input features
+        :param y: [numpy 1D array shape (n_data,)] target values
+        :param threshold: [float]
+        :param n_samples: [int] number of samples to draw
+        :return:
+        """
+        X, y = self._check_inputs(X, y)
+
+        idx_pos = np.where(y!=0)[0]
+        idx_neg = np.where(y==0)[0]
+
+        npos = len(idx_pos)
+        nneg = len(idx_neg)
+
+        d_out = {}
+
+        p0 = self.parameters
+        y_pred0 = scipy.stats.logistic.cdf(X.dot(p0[:-1]) + p0[-1]) # shape (ndata,)
+
+        # Area under the receiver operator curve
+        auc0 = sklearn.metrics.roc_auc_score(y, y_pred0)
+
+        # Number of entries in the confusion matrix
+        ntp0 = np.sum((y_pred0[idx_pos] > threshold).astype(int))
+        nfn0 = npos - ntp0
+        ntn0 = np.sum((y_pred0[idx_neg] <= threshold).astype(int))
+        nfp0 = nneg - ntn0
+
+        # True positive and negative rates of the confusion matrix
+        tpr0 = ntp0/float(npos)
+        tnr0 = ntn0/float(nneg)
+
+        p = np.random.multivariate_normal(p0, self.cvr_mtx, n_samples).T  # shape (npars, nsamples,)
+        y_pred = scipy.stats.logistic.cdf(X.dot(p[:-1,:]) + p[-1:,:]).T # shape (nsamples,ndata,)
+
+        # Area under the receiver operator curve
+        auc = np.array([sklearn.metrics.roc_auc_score(y, v) for v in y_pred])
+        auc_err = np.sqrt(np.mean((auc - auc0)**2))
+        d_out['auc'] = {'value': auc0, 'error': auc_err}
+
+        # Number of entries in the confusion matrix
+        ntp = np.sum((y_pred[:,idx_pos] > threshold).astype(int), axis=1)
+        nfn = npos - ntp
+        ntn = np.sum((y_pred[:,idx_neg] <= threshold).astype(int), axis=1)
+        nfp = nneg - ntn
+        ntp_err = np.sqrt(np.mean((ntp-ntp0)**2))
+        nfn_err = np.sqrt(np.mean((nfn-nfn0)**2))
+        ntn_err = np.sqrt(np.mean((ntn-ntn0)**2))
+        nfp_err = np.sqrt(np.mean((nfp-nfp0)**2))
+        cm_cvr_mtx = np.ones((4,4), dtype=float)
+        cm_cvr_mtx[0,1] = cm_cvr_mtx[1,0] = np.mean((ntp-ntp0)*(nfn-nfn0))
+        cm_cvr_mtx[0,2] = cm_cvr_mtx[2,0] = np.mean((ntp-ntp0)*(ntn-ntn0))
+        cm_cvr_mtx[0,3] = cm_cvr_mtx[3,0] = np.mean((ntp-ntp0)*(nfp-nfp0))
+        cm_cvr_mtx[1,2] = cm_cvr_mtx[2,1] = np.mean((nfn-nfn0)*(ntn-ntn0))
+        cm_cvr_mtx[1,3] = cm_cvr_mtx[3,1] = np.mean((nfn-nfn0)*(nfp-nfp0))
+        cm_cvr_mtx[2,3] = cm_cvr_mtx[3,2] = np.mean((ntn-ntn0)*(nfp-nfp0))
+        d_out['confusion matrix'] = {'true positives': {'value': ntp, 'error': ntp_err},
+                                     'false negatives': {'value': nfn, 'error': nfn_err},
+                                     'true negatives': {'value': ntn, 'error': ntn_err},
+                                     'false positives': {'value': nfp, 'error': nfp_err},
+                                     'covariance matrix': cm_cvr_mtx}
+        tpr = ntp/float(npos)
+        tnr = ntn/float(nneg)
+        tpr_err = np.sqrt(np.mean((tpr-tpr0)**2))
+        tnr_err = np.sqrt(np.mean((tnr-tnr0)**2))
+        rates_cvr = np.mean((tpr-tpr0)*(tnr-tnr0))
+        d_out['prediction rates'] = {'true positive rate': {'value': tpr, 'error': tpr_err},
+                          'true negative rate': {'value': tnr, 'error': tnr_err},
+                          'covariance': rates_cvr}
+
+        return d_out
 
     def _check_inputs(self, X, y=None):
         """
