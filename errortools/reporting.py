@@ -5,9 +5,30 @@ import scipy
 
 def show_parabolic_approximation(model, n_points=21, n_stddevs=1, pdf=None):
     """
+    Calculates the loss function and its parabolic approximation around the
+    fitted minimum in all of the parameters
 
-    :param model:
-    :return:
+    The parabolic approximation is of the loss function is often made to estimate
+    parameter errors. The accuracy of the errors depends on the closeness of the
+    approximation
+
+    :param model: fitted model. Needs to expose
+        a loss method to calculate the loss,
+        a parameters attribute to get the fitted parameter values,
+        X and y attributes to get the training features and targets,
+        a hessian_mtx attribute or cvr_mtx attribute to determine the
+            hessian at the minimum
+        an errors attribute or cvr_mtx attribute to determine the
+            errors of the parameters
+    :param n_points: [int] number of points in each of the parameters
+        to calculate loss and parabolic approximation on
+    :param n_stddevs: [float] number of times the error on a parameter
+        left and right of the minimum to calculate loss an approximation on
+    :param pdf: [PdfPages, str, or None] If instance of PdfPages plots will
+        be added to the pdf. If str a new pdf will be created by this name.
+    :return: PdfPages if pdf is not None, else three numpy 2D arrays
+        parameter values, loss function values, parabolic approximation values
+        of shape (n_parameters, n_points,)
     """
     # ToDo add gradient of loss
     if not hasattr(model, "loss"):
