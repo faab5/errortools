@@ -88,6 +88,7 @@ def report_loss_versus_approximation(model, features, pdf=None, pdf_name = "repo
 
     #X_bias = np.concatenate((X, np.ones((X.shape[0], 1))), axis=1)
     #f0 = model.negative_log_posterior(model.parameters, X_bias, y)
+    figures = []
     f0 = model.negative_log_posterior(model.parameters, model.X, model.y)
     
     if pdf == None:
@@ -105,25 +106,23 @@ def report_loss_versus_approximation(model, features, pdf=None, pdf_name = "repo
 
         for w in weights:
             params[p] = w
-            #loss.append(model.negative_log_posterior(params, X_bias, y))
             loss.append(model.negative_log_posterior(params, model.X, model.y))
             parabolic_approx = params - model.parameters
 
-            approx.append(f0 + 0.5 * np.array([np.dot(parabolic_approx, np.dot(scipy.linalg.inv(model.cvr_mtx),
+            approx.append(f0 + 0.5 * np.array([np.dot(parabolic_approx, np.dot(model.hessian_mtx,
                                                                                parabolic_approx))]))
-
-        col_ind = p % 2  
-        row_ind = p // 2
         
         ax.plot(weights, loss, '--', color='red', alpha=0.5, label="original")
         ax.plot(weights, approx, '-', color='orange', alpha=0.5, label="parabolic approximation")
-        ax.set_xlabel(features[p])
-        ax.set_title("logloss")
+        ax.set_xlabel("Value of parameter: " + features[p])
         ax.grid()
         ax.legend()
         pdf.savefig(fig)
+        
+        figures.append(fig)
+        plt.close()
     
-    return pdf
+    return pdf, figures
 
 
 def report_parameter_error(model, features, pdf=None, pdf_name = "report.pdf",
