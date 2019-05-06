@@ -69,7 +69,7 @@ def errors_from_linear_error_propagation(grad, cvr_mtx, return_covariance=False)
         error = np.sqrt(np.abs([np.dot(g, np.dot(cvr_mtx, g)) for g in grad]))
         return error
     
-def report_loss_versus_approximation(model, X, y, features, pdf=None, pdf_name = "report.pdf"):
+def report_loss_versus_approximation(model, features, pdf=None, pdf_name = "report.pdf"):
     """
     Create a PDF report with plots showing the loss versus the parabolic approximation of the loss. 
 
@@ -88,7 +88,7 @@ def report_loss_versus_approximation(model, X, y, features, pdf=None, pdf_name =
 
     #X_bias = np.concatenate((X, np.ones((X.shape[0], 1))), axis=1)
     #f0 = model.negative_log_posterior(model.parameters, X_bias, y)
-    f0 = model.negative_log_posterior(model.parameters, X, y)
+    f0 = model.negative_log_posterior(model.parameters, model.X, model.y)
     
     if pdf == None:
         pdf = PdfPages(pdf_name)
@@ -97,7 +97,7 @@ def report_loss_versus_approximation(model, X, y, features, pdf=None, pdf_name =
         fig, ax = plt.subplots(1, 1, figsize=(8,4))
 
         param_minimum = model.minuit.get_param_states()[p]['value']
-        weights = np.linspace(param_minimum - 1, param_minimum + 1, 100)
+        weights = np.linspace(param_minimum - (1 * model.errors[p]), param_minimum + (1 * model.errors[p]), 100)
         
         params = model.parameters.copy()
         loss = []
@@ -106,7 +106,7 @@ def report_loss_versus_approximation(model, X, y, features, pdf=None, pdf_name =
         for w in weights:
             params[p] = w
             #loss.append(model.negative_log_posterior(params, X_bias, y))
-            loss.append(model.negative_log_posterior(params, X, y))
+            loss.append(model.negative_log_posterior(params, model.X, model.y))
             parabolic_approx = params - model.parameters
 
             approx.append(f0 + 0.5 * np.array([np.dot(parabolic_approx, np.dot(scipy.linalg.inv(model.cvr_mtx),
@@ -236,7 +236,7 @@ def report_error_indivial_pred(model, sample, param, features, x_min, x_max,
     
     return pdf
 
-def get_positive_ratio(model, X, y, n_samples=1000, bins=20):
+def get_positive_ratio(model, n_samples=1000, bins=20):
     """
     Calculate the positive ratio of the model per bin and estimate the errors
     over these by sampling parameters from a multivariate normal distribution.
@@ -248,21 +248,21 @@ def get_positive_ratio(model, X, y, n_samples=1000, bins=20):
     :param bins: number of bins to distribute the model scores over
 
     """ 
-    y_pred = model.predict(X)
+    y_pred = model.predict(model.X)
     H_pred_all, bin_edges = np.histogram(y_pred, bins=bins, range=(0,1))
-    H_pred_pos, _ = np.histogram(y_pred[y==1], bins=bins, range=(0,1))
+    H_pred_pos, _ = np.histogram(y_pred[model.y==1], bins=bins, range=(0,1))
     ratio = H_pred_pos.astype(float)/(H_pred_all+1e-12)
     
     p = np.random.multivariate_normal(mean=model.parameters, cov=model.cvr_mtx, size=n_samples)
-    y_pred_sampled = 1./(1.+np.exp(-np.dot(p, np.concatenate((X,np.ones((X.shape[0],1))), axis=1).T)))
+    y_pred_sampled = 1./(1.+np.exp(-np.dot(p, np.concatenate((model.X,np.ones((model.X.shape[0],1))), axis=1).T)))
     H_sampled_all = np.array([np.histogram(p, bins=bins, range=(0,1))[0] for p in y_pred_sampled])
-    H_sampled_pos = np.array([np.histogram(p[y==1], bins=bins, range=(0,1))[0] for p in y_pred_sampled])
+    H_sampled_pos = np.array([np.histogram(p[model.y==1], bins=bins, range=(0,1))[0] for p in y_pred_sampled])
     sampled_ratios = H_sampled_pos.astype(float)/(H_sampled_all+1e-12)
     err = np.sqrt(np.mean((sampled_ratios-ratio[np.newaxis,:])**2, axis=0))
     
     return ratio, err, bin_edges
 
-def report_model_positive_ratio(model, X, y, n_samples, bins, pdf=None, pdf_name='report.pdf', figsize=(8,4)):
+def report_model_positive_ratio(model, n_samples, bins, pdf=None, pdf_name='report.pdf', figsize=(8,4)):
     """
     Create a PDF report showing the model's positive ratio verus the model score. 
 
@@ -277,7 +277,7 @@ def report_model_positive_ratio(model, X, y, n_samples, bins, pdf=None, pdf_name
     """ 
     fig, ax = plt.subplots(1, 1, figsize=figsize)
 
-    ratio, err, e = get_positive_ratio(model, X, y, n_samples, bins)
+    ratio, err, e = get_positive_ratio(model, n_samples, bins)
 
     ax.plot([0,1], [0,1], '-', color='black')
     ax.errorbar(x=e[:-1], y=ratio, yerr=err, fmt='o', color='orange', alpha=0.5, markersize=10, barsabove=True, capsize=10)
@@ -293,7 +293,7 @@ def report_model_positive_ratio(model, X, y, n_samples, bins, pdf=None, pdf_name
     
     return pdf
 
-def report_error_test_samples(model, X, pdf=None, pdf_name='report.pdf', figsize=(8, 4)):
+def report_error_test_samples(model, X_test, pdf=None, pdf_name='report.pdf', figsize=(8, 4)):
     """
     Create a PDF report showing the estimated error on the provided test samples.
     These are ordered by the prediction score.
@@ -305,10 +305,10 @@ def report_error_test_samples(model, X, pdf=None, pdf_name='report.pdf', figsize
     :param figsize: size of the figure (tuple)
     """ 
     fig, ax = plt.subplots(1, 1, figsize=figsize)
-    x = np.linspace(0, len(X), len(X))
+    x = np.linspace(0, len(X_test), len(X_test))
 
-    y_pred = model.predict(X)
-    el, eu = model.prediction_errors_from_interval(X)
+    y_pred = model.predict(X_test)
+    el, eu = model.prediction_errors_from_interval(X_test)
     s_pred, s_el, s_eu = (np.asarray(list(t)) for t in zip(*sorted(zip(y_pred, el, eu), reverse=True)))
     ax.fill_between(x, s_pred-s_el, s_pred+s_eu, alpha=0.5, color='orange')
     ax.plot(x, s_pred, '-', color='orange')
