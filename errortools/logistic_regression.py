@@ -1,6 +1,7 @@
 import numpy as np
 import iminuit
 import scipy.stats
+import sklearn.metrics
 
 class LogisticRegression(object):
     """
@@ -12,27 +13,19 @@ class LogisticRegression(object):
     - errors:       dwn, up = m.prediction_errors(X)
 
     Attributes:
-    :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
     :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
     :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
-    :param minuit: instance of the Minuit minimization class
-    :param X: input features for fitting
-    :param y: targets for fitting
 
     ToDo:
-        Remove fit_intercept
-        Add fit_intercept to fit
         Remove assertions
     """
-    def __init__(self, fit_intercept=True, l1=0, l2=0):
+    def __init__(self, l1=0, l2=0):
         """
         Instantiate a logistic regression
-        :param fit_intercept: whether or not to fit the include the intercept/bias in the fit
         :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
         :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
         """
         # pre-fit attributes
-        self.fit_intercept = fit_intercept
         self.l1 = l1
         self.l2 = l2
 
@@ -40,9 +33,28 @@ class LogisticRegression(object):
         self.minuit  = None
 
         # training data
-        self.X = None
-        self.y = None
-        
+        self._X = None
+        self._y = None
+
+    @property
+    def X(self):
+        """
+        Training input features
+        """
+        if self._X is None:
+            raise RuntimeError("Fit before access to fit data")
+        return self._X
+
+    @property
+    def y(self):
+        """
+        Training output targets
+        """
+        if self._y is None:
+            raise RuntimeError("Fit before access to fit data")
+        return self._y
+
+
     @property
     def parameters(self):
         """
@@ -60,7 +72,7 @@ class LogisticRegression(object):
         """
         if self.minuit is None:
             raise RuntimeError("Fit before access to fit parameters")
-        return np.sqrt(np.diag(self.minuit.np_matrix()))
+        return np.sqrt(np.diag(self.minuit.np_covariance()))
 
     @property
     def cvr_mtx(self):
@@ -69,7 +81,24 @@ class LogisticRegression(object):
         """
         if self.minuit is None:
             raise RuntimeError("Fit before access to fit parameters")
-        return self.minuit.np_matrix()
+        return self.minuit.np_covariance()
+
+    @property
+    def hessian_mtx(self):
+        """
+        Covariance matrix of the negative log-likelihood around the minimum
+        I.e. the inverse of the covariance matrix
+        """
+        if self.minuit is None:
+            raise RuntimeError("Fit before access to fit parameters")
+        cvr_mtx =  self.minuit.np_covariance()
+        fixed = np.array(self.minuit.fixed.values())
+        # fixed parameter row and columns should only contain zeros
+        assert np.sum(np.abs([cvr_mtx[i,j] for i in range(cvr_mtx.shape[0]) for j in range(cvr_mtx.shape[1]) if fixed[i] or fixed[j]])) == 0
+        cvr_mtx[fixed, fixed] = 1
+        h = scipy.linalg.inv(cvr_mtx)
+        h[fixed, fixed] = 0
+        return h
 
     def negative_log_posterior(self, p, X, y):
         """
@@ -140,8 +169,10 @@ class LogisticRegression(object):
 
     def fit(self, X, y,
             initial_parameters=None, initial_step_sizes=None,
-            parameter_limits=None, parameter_fixes=None,
+            parameter_limits=None,
+            parameter_fixes=None,
             print_level=0,
+            fit_intercept=None,
             max_function_calls=10000, n_splits=1):
         """
         Fit logistic regression to feature matrix X and target vector y
@@ -167,13 +198,14 @@ class LogisticRegression(object):
             initial value
             Use False not to fix any parameters and None to take the fixes from the previous fit
         :param print_level: 0 is quiet. 1 print out fit results. 2 paranoid. 3 really paranoid
+        :param fit_intercept: If given, overrides the last element of parameter_fixes
         :param max_function_calls: [integer] maximum number of function calls
         :param n_splits: [integer] split fit in to n_splits runs. Fitting stops when it found the function
             minimum to be valid or n_calls is reached
         """
-        self.X, self.y = self._check_inputs(X, y)
+        self._X, self._y = self._check_inputs(X, y)
 
-        assert self.minuit is None or self.X.shape[1] + 1 == self.parameters.shape[0]
+        assert self.minuit is None or self._X.shape[1] + 1 == self.parameters.shape[0]
 
         if self.minuit is None or\
             initial_parameters is not None or\
@@ -181,7 +213,7 @@ class LogisticRegression(object):
             parameter_limits is not None or\
             parameter_fixes is not None:
 
-            n_dim = self.X.shape[1] + 1
+            n_dim = self._X.shape[1] + 1
 
             if initial_parameters is None:
                 if self.minuit is not None:
@@ -238,11 +270,14 @@ class LogisticRegression(object):
             elif self.minuit is not None:
                 parameter_fixes = [state['is_fixed'] for state in self.minuit.get_param_states()]
 
+            if fit_intercept in (True, False):
+                parameter_fixes[-1] = (not fit_intercept)
+
             # define function to be minimized
-            fcn = lambda p: self.negative_log_posterior(p, self.X, self.y)
+            fcn = lambda p: self.negative_log_posterior(p, self._X, self._y)
 
             # define the gradient of the function to be minimized
-            grd = lambda p: self.gradient_negative_log_posterior(p, self.X, self.y)
+            grd = lambda p: self.gradient_negative_log_posterior(p, self._X, self._y)
 
             # initiate minuit minimizer
             self.minuit = iminuit.Minuit.from_array_func(fcn=fcn,
@@ -329,9 +364,7 @@ class LogisticRegression(object):
         X, _ = self._check_inputs(X, None)
         X_biased = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
         p = self.parameters
-        #mid = X.dot(p)
         mid = X_biased.dot(p)
-        #delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X], dtype=float)
         delta = np.array([np.sqrt(np.abs(np.dot(u,np.dot(self.cvr_mtx, u)))) for u in X_biased], dtype=float)
         y_pred = scipy.stats.logistic.cdf(mid)
         upper = scipy.stats.logistic.cdf(mid + n_stddevs * delta) - y_pred
@@ -365,9 +398,7 @@ class LogisticRegression(object):
         sampled_parameters = np.random.multivariate_normal(p, self.cvr_mtx, n_samples).T # shape (npars, nsamples,)
         fitted_parameters = np.tile(p, (n_samples, 1)).T # shape (npars, nsamples,)
 
-        #sigmoid_sampled_parameters = scipy.stats.logistic.cdf(X.dot(sampled_parameters)) # shape (ndata, nsamples,)
         sigmoid_sampled_parameters = scipy.stats.logistic.cdf(X_biased.dot(sampled_parameters)) # shape (ndata, nsamples,)
-        #sigmoid_fitted_parameters = scipy.stats.logistic.cdf(X.dot(fitted_parameters)) # shape (ndata, nsamples,)
         sigmoid_fitted_parameters = scipy.stats.logistic.cdf(X_biased.dot(fitted_parameters)) # shape (ndata, nsamples,)
         sigmoid_variation = sigmoid_sampled_parameters - sigmoid_fitted_parameters  # shape (ndata, nsamples,)
 
@@ -397,7 +428,6 @@ class LogisticRegression(object):
 
         X_biased = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
 
-        #fcn = lambda p: scipy.stats.logistic.cdf(X.dot(p))
         fcn = lambda p: scipy.stats.logistic.cdf(X_biased.dot(p))
 
         p = self.parameters
@@ -414,6 +444,92 @@ class LogisticRegression(object):
         else:
             symmetric_error = np.sqrt(np.abs([np.dot(g, np.dot(self.cvr_mtx, g)) for g in gradients]))
             return symmetric_error
+
+    def test(self, X, y, threshold=0.5, n_samples=10000):
+        """
+        Determine statistics and uncertainties on a test set
+
+        Calculates the confusion matrix, true and false positive rates,
+        area under the receiver operator curve, and their uncertainties
+        on a test set by sampling parameters from an approximate posterior
+        (a multivariate normal distribution)
+        Does not (yet) account for uncertainties due to the test set itself
+
+        :param X: [numpy 2D array shape (n_data, n_features,)] input features
+        :param y: [numpy 1D array shape (n_data,)] target values
+        :param threshold: [float]
+        :param n_samples: [int] number of samples to draw
+        :return:
+        """
+        X, y = self._check_inputs(X, y)
+
+        idx_pos = np.where(y!=0)[0]
+        idx_neg = np.where(y==0)[0]
+
+        npos = len(idx_pos)
+        nneg = len(idx_neg)
+
+        d_out = {}
+
+        p0 = self.parameters
+        y_pred0 = scipy.stats.logistic.cdf(X.dot(p0[:-1]) + p0[-1]) # shape (ndata,)
+
+        # Area under the receiver operator curve
+        auc0 = sklearn.metrics.roc_auc_score(y, y_pred0)
+
+        # Number of entries in the confusion matrix
+        ntp0 = np.sum((y_pred0[idx_pos] > threshold).astype(int))
+        nfn0 = npos - ntp0
+        ntn0 = np.sum((y_pred0[idx_neg] <= threshold).astype(int))
+        nfp0 = nneg - ntn0
+
+        # True positive and negative rates of the confusion matrix
+        tpr0 = ntp0/float(npos)
+        tnr0 = ntn0/float(nneg)
+
+        p = np.random.multivariate_normal(p0, self.cvr_mtx, n_samples).T  # shape (npars, nsamples,)
+        y_pred = scipy.stats.logistic.cdf(X.dot(p[:-1,:]) + p[-1:,:]).T # shape (nsamples,ndata,)
+
+        # Area under the receiver operator curve
+        auc = np.array([sklearn.metrics.roc_auc_score(y, v) for v in y_pred])
+        auc_err = np.sqrt(np.mean((auc - auc0)**2))
+        d_out['auc'] = {'value': auc0, 'error': auc_err}
+
+        # Number of entries in the confusion matrix
+        ntp = np.sum((y_pred[:,idx_pos] > threshold).astype(int), axis=1)
+        nfn = npos - ntp
+        ntn = np.sum((y_pred[:,idx_neg] <= threshold).astype(int), axis=1)
+        nfp = nneg - ntn
+        cm_cvr_mtx = np.empty((4,4), dtype=float)
+        cm_cvr_mtx[0,0] = np.mean((ntp-ntp0)**2)
+        cm_cvr_mtx[0,1] = cm_cvr_mtx[1,0] = np.mean((ntp-ntp0)*(nfn-nfn0))
+        cm_cvr_mtx[0,2] = cm_cvr_mtx[2,0] = np.mean((ntp-ntp0)*(ntn-ntn0))
+        cm_cvr_mtx[0,3] = cm_cvr_mtx[3,0] = np.mean((ntp-ntp0)*(nfp-nfp0))
+        cm_cvr_mtx[1,1] = np.mean((nfn-nfn0)**2)
+        cm_cvr_mtx[1,2] = cm_cvr_mtx[2,1] = np.mean((nfn-nfn0)*(ntn-ntn0))
+        cm_cvr_mtx[1,3] = cm_cvr_mtx[3,1] = np.mean((nfn-nfn0)*(nfp-nfp0))
+        cm_cvr_mtx[2,2] = np.mean((ntn-ntn0)**2)
+        cm_cvr_mtx[2,3] = cm_cvr_mtx[3,2] = np.mean((ntn-ntn0)*(nfp-nfp0))
+        cm_cvr_mtx[3,3] = np.mean((nfp-nfp0)**2)
+        ntp_err = np.sqrt(cm_cvr_mtx[0,0])
+        nfn_err = np.sqrt(cm_cvr_mtx[1,1])
+        ntn_err = np.sqrt(cm_cvr_mtx[2,2])
+        nfp_err = np.sqrt(cm_cvr_mtx[3,3])
+        d_out['confusion matrix'] = {'true positives': {'value': ntp0, 'error': ntp_err},
+                                     'false negatives': {'value': nfn0, 'error': nfn_err},
+                                     'true negatives': {'value': ntn0, 'error': ntn_err},
+                                     'false positives': {'value': nfp0, 'error': nfp_err},
+                                     'covariance matrix': cm_cvr_mtx}
+        tpr = ntp/float(npos)
+        tnr = ntn/float(nneg)
+        tpr_err = np.sqrt(np.mean((tpr-tpr0)**2))
+        tnr_err = np.sqrt(np.mean((tnr-tnr0)**2))
+        rates_cvr = np.mean((tpr-tpr0)*(tnr-tnr0))
+        d_out['prediction rates'] = {'true positive rate': {'value': tpr0, 'error': tpr_err},
+                          'true negative rate': {'value': tnr0, 'error': tnr_err},
+                          'covariance': rates_cvr}
+
+        return d_out
 
     def _check_inputs(self, X, y=None):
         """
@@ -433,17 +549,12 @@ class LogisticRegression(object):
         if self.minuit is not None:
             p = self.minuit.np_values()
 
-            #if X.shape[1] + int(self.fit_intercept) == p.shape[0]:
             if X.shape[1] + 1 == p.shape[0]:
                 pass
-            #elif X.shape[1] == 1 and X.shape[0] + int(self.fit_intercept) == p.shape[0]:
             elif X.shape[1] == 1 and X.shape[0] + 1 == p.shape[0]:
                 X = X.T
             else:
                 raise ValueError("Dimension of X do not match dimensions of parameters")
-
-        #if self.fit_intercept:
-        #    X = np.concatenate((X, np.ones((X.shape[0], 1), dtype=float)), axis=1)
 
         if y is not None:
             y = (np.atleast_1d(y) != 0).astype(int)
