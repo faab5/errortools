@@ -74,10 +74,6 @@ def report_loss_versus_approximation(model, features, pdf=None, pdf_name = "repo
     Create a PDF report with plots showing the loss versus the parabolic approximation of the loss. 
 
     :param model: fitted model
-    :param X: [numpy.ndarray shape (n_data, n_features)] input features
-    :param y: targets for fitting
-    :param l1: L1-regularization parameter. Multiplies the sum of absolute parameters
-    :param l2: L2-regularization parameter. Multiplies half the sum of squared parameters
     :param features: list of input feature names
     :param pdf: PDF pages object
     :param pdf_name: name of the PDF document
@@ -292,7 +288,7 @@ def report_model_positive_ratio(model, n_samples, bins, pdf=None, pdf_name='repo
     
     return pdf
 
-def report_error_test_samples(model, X_test, pdf=None, pdf_name='report.pdf', figsize=(8, 4)):
+def report_error_test_samples(model, X_test, y_test, method='interval', pdf=None, pdf_name='report.pdf', figsize=(8, 4)):
     """
     Create a PDF report showing the estimated error on the provided test samples.
     These are ordered by the prediction score.
@@ -307,9 +303,10 @@ def report_error_test_samples(model, X_test, pdf=None, pdf_name='report.pdf', fi
     x = np.linspace(0, len(X_test), len(X_test))
 
     y_pred = model.predict(X_test)
-    el, eu = model.prediction_errors_from_interval(X_test)
-    s_pred, s_el, s_eu = (np.asarray(list(t)) for t in zip(*sorted(zip(y_pred, el, eu), reverse=True)))
-    ax.fill_between(x, s_pred-s_el, s_pred+s_eu, alpha=0.5, color='orange')
+    el, eu = model.prediction_errors(X_test, method=method)
+    s_pred, s_el, s_eu, s_y_test = (np.asarray(list(t)) for t in zip(*sorted(zip(y_pred, el, eu, y_test), reverse=True)))
+    ax.fill_between(x, s_pred-s_el, s_pred+s_eu, where = s_y_test == 1, alpha=0.5, color='green')
+    ax.fill_between(x, s_pred-s_el, s_pred+s_eu, where = s_y_test == 0, alpha=0.5, color='red')
     ax.plot(x, s_pred, '-', color='orange')
 
     ax.set_ylim(0,1)
