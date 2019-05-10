@@ -6,7 +6,8 @@ def read(fname):
 
 
 base_packages = ["numpy", "scipy", "scikit-learn",
-                 "pandas", "matplotlib", "jupyter"]
+                 "pandas", "matplotlib", "jupyter", 
+                 "iminuit"]
 
 setup(
     name='errortools',
