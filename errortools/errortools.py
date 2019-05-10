@@ -3,6 +3,7 @@ import iminuit
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import scipy
+import sklearn
 
 def errors_from_sampling(fnc, X, p, cvr_mtx, n_samples='auto', return_covariance=False, *args, **kwargs):
     """
@@ -320,3 +321,66 @@ def report_error_test_samples(model, X_test, y_test, method='interval', pdf=None
     pdf.savefig(fig)
     
     return pdf
+
+def auc(model, n_samples=10000):
+    """
+    :param model:
+    :param n_samples:
+    :return:
+    """
+    X = model.X
+    y = model.y
+
+    idx_pos = np.where(y != 0)[0]
+    idx_neg = np.where(y == 0)[0]
+
+    n_pos = np.sum(y)
+    n_neg = len(y) - n_pos
+
+    p0 = model.parameters
+    cvr_mtx = model.cvr_mtx
+
+    y_pred0 = scipy.stats.logistic.cdf(X.dot(p0[:-1]) + p0[-1])  # shape (ndata,)
+    p = np.random.multivariate_normal(p0, cvr_mtx, n_samples).T  # shape (npars, nsamples,)
+    y_pred = scipy.stats.logistic.cdf(X.dot(p[:-1, :]) + p[-1:, :]).T  # shape (nsamples, ndata)
+
+    auc0 = sklearn.metrics.roc_auc_score(y, y_pred0)
+    auc = np.array([sklearn.metrics.roc_auc_score(y, v) for v in y_pred])
+    auc_err = np.sqrt(np.mean((auc-auc0)**2))
+    return auc, auc_err
+
+def roc(model, n_samples=10000):
+    """
+    :param model:
+    :param n_samples:
+    :return:
+    """
+    X = model.X
+    y = model.y
+
+    idx_pos = np.where(y != 0)[0]
+    idx_neg = np.where(y == 0)[0]
+
+    n_pos = np.sum(y)
+    n_neg = len(y) - n_pos
+
+    p0 = model.parameters
+    cvr_mtx = model.cvr_mtx
+
+    y_pred0 = scipy.stats.logistic.cdf(X.dot(p0[:-1]) + p0[-1])  # shape (ndata,)
+    p = np.random.multivariate_normal(p0, cvr_mtx, n_samples).T  # shape (npars, nsamples,)
+    y_pred = scipy.stats.logistic.cdf(X.dot(p[:-1, :]) + p[-1:, :]).T  # shape (nsamples, ndata)
+
+    idx_y_sorted0 = np.argsort(y_pred0)[::-1]
+    idx_y_sorted = np.argsort(y_pred, axis=1)[:, ::-1]
+
+    idx_neg0 = np.where(y[idx_y_sorted0] == 0)[0]
+    fpr0 = np.arange(1, n_neg + 1) / float(n_neg)
+    tpr0 = (idx_neg0 - np.arange(n_neg)) / float(n_pos)
+
+    idx_neg = np.array([np.where(y[v] == 0)[0] for v in idx_y_sorted])
+    tpr = (idx_neg - np.arange(n_neg)[np.newaxis, :]) / float(n_pos)
+
+    tpr_err = np.sqrt(np.mean((tpr - tpr0[np.newaxis, :]) ** 2, axis=0))
+
+    return fpr0, tpr0, tpr_err
