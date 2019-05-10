@@ -1,7 +1,18 @@
 div#notebook {background-color: #ffffff; 
               border-top: none; 
-    /*background-image: url("img/wbaa_logo.jpg"), url("img/logo_ing.jpeg");
+    background-image: url("img/wbaa_logo.jpg"), url("img/logo_ing.jpeg");
     background-size: 10%, 10%;
-    background-position: 95% 0%, 95% 95%;
-    background-repeat: no-repeat, no-repeat;*/
+    background-position: 95% 5%, 95% 95%;
+    background-repeat: no-repeat, no-repeat;
 }
+
+
+
+.code_cell.rendered {
+    width: 85% 
+}
+
+.text_cell .text_cell_render {
+    width: 85%
+}
+
